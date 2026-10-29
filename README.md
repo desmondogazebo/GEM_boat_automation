@@ -34,7 +34,15 @@ The XML files are sanitized Task Scheduler templates. They omit the exporting ac
 
 ## Releases
 
-Every push to `main` builds both AutoHotkey scripts with Ahk2Exe and publishes a GitHub Release tagged for that commit. Each release includes `1batch.exe`, `2batch.exe`, and `GameOCR.ps1`; keep the helper beside the executable when running it.
+Releases follow [Semantic Versioning](https://semver.org/) and every change is recorded in [CHANGELOG.md](CHANGELOG.md).
+
+To publish a release:
+
+1. Move the entries under `## [Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` section and update the compare links at the bottom of the changelog.
+2. Commit and push to `main`.
+3. Tag the commit and push the tag: `git tag vX.Y.Z` then `git push origin vX.Y.Z`.
+
+The tag triggers a workflow that checks the tag is valid SemVer (pre-releases such as `v1.0.0-rc.1` are marked as pre-releases), builds both scripts with Ahk2Exe, and publishes a GitHub Release containing `1batch.exe`, `2batch.exe` and `GameOCR.ps1`. The release notes are the matching changelog section; the workflow fails if that section is missing or empty. Keep `GameOCR.ps1` beside the executable when running it.
 
 ## Repository contents
 

@@ -2,8 +2,8 @@ name: Build and release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -14,6 +14,24 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Validate version and extract release notes
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(?<version>(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?)$') {
+            throw "Tag '$tag' is not a Semantic Versioning tag (expected vMAJOR.MINOR.PATCH[-prerelease])."
+          }
+          $version = $Matches.version
+
+          $changelog = Get-Content CHANGELOG.md -Raw
+          $pattern = "(?ms)^## \[$([regex]::Escape($version))\][^\r\n]*\r?\n(?<notes>.*?)(?=^## \[|^\[[^\]]+\]: |\z)"
+          if ($changelog -notmatch $pattern -or [string]::IsNullOrWhiteSpace($Matches.notes)) {
+            throw "CHANGELOG.md has no non-empty '## [$version]' section."
+          }
+
+          Set-Content -Path "$env:RUNNER_TEMP\release-notes.md" -Value $Matches.notes.Trim() -Encoding utf8
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Install AutoHotkey v2
         shell: pwsh
@@ -71,21 +89,22 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          GITHUB_SHA: ${{ github.sha }}
         shell: pwsh
         run: |
-          $tag = "build-$env:GITHUB_SHA"
-          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          $tag = $env:GITHUB_REF_NAME
+          $notes = "$env:RUNNER_TEMP\release-notes.md"
           $assets = @("dist/1batch.exe", "dist/2batch.exe", "dist/GameOCR.ps1")
+          $prerelease = if ($env:VERSION.Contains("-")) { @("--prerelease") } else { @() }
 
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $assets --clobber
+            gh release edit $tag --title $tag --notes-file $notes @prerelease
+            if ($LASTEXITCODE -eq 0) {
+              gh release upload $tag $assets --clobber
+            }
           }
           else {
-            gh release create $tag $assets `
-              --title "Build $shortSha" `
-              --notes "Automated build for commit $env:GITHUB_SHA."
+            gh release create $tag $assets --verify-tag --title $tag --notes-file $notes @prerelease
           }
 
           if ($LASTEXITCODE -ne 0) {
