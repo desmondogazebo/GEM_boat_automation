@@ -47,8 +47,7 @@
   </Settings>
   <Actions Context="CurrentUser">
     <Exec>
-      <Command>"C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe"</Command>
-      <Arguments>%USERPROFILE%\Documents\My Games\Granado Espada M\1batch.ahk</Arguments>
+      <Command>"%USERPROFILE%\Documents\My Games\Granado Espada M\1batch.exe"</Command>
     </Exec>
   </Actions>
 </Task>
