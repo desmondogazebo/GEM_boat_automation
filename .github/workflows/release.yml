@@ -1,0 +1,91 @@
+name: Build and release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install AutoHotkey v2
+        shell: pwsh
+        run: |
+          winget install --id AutoHotkey.AutoHotkey --exact --silent --accept-package-agreements --accept-source-agreements
+          if ($LASTEXITCODE -ne 0) {
+            throw "AutoHotkey v2 installation failed (exit code $LASTEXITCODE)"
+          }
+
+      - name: Install Ahk2Exe
+        shell: pwsh
+        run: |
+          $version = "1.1.37.02a2"
+          $archiveName = "Ahk2Exe$version.zip"
+          $archive = Join-Path $env:RUNNER_TEMP $archiveName
+          $url = "https://github.com/AutoHotkey/Ahk2Exe/releases/download/Ahk2Exe$version/$archiveName"
+          $expectedHash = "c29b8c3a5124850d79fc9e66e2ca79677c377d7f31631ad3022ba159c5d9e3be"
+
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          $actualHash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $expectedHash) {
+            throw "Ahk2Exe archive SHA-256 mismatch: $actualHash"
+          }
+
+          $compilerDirectory = Join-Path $env:RUNNER_TEMP "Ahk2Exe"
+          Expand-Archive -Path $archive -DestinationPath $compilerDirectory
+
+      - name: Compile scripts
+        shell: pwsh
+        run: |
+          $compiler = Get-ChildItem "$env:RUNNER_TEMP\Ahk2Exe" -Filter Ahk2Exe.exe -Recurse |
+            Select-Object -First 1
+          $base = Get-ChildItem @("$env:ProgramFiles\AutoHotkey", "$env:LOCALAPPDATA\Programs\AutoHotkey") -Filter AutoHotkey64.exe -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+
+          if (-not $compiler) {
+            throw "Could not find Ahk2Exe.exe in $env:RUNNER_TEMP\Ahk2Exe"
+          }
+          if (-not $base) {
+            throw "Could not find AutoHotkey64.exe in the AutoHotkey installation"
+          }
+
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          foreach ($script in @("1batch", "2batch")) {
+            & $compiler.FullName /in "$PWD\$script.ahk" /out "$PWD\dist\$script.exe" /base $base.FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw "Ahk2Exe failed to compile $script.ahk (exit code $LASTEXITCODE)"
+            }
+          }
+
+          Copy-Item GameOCR.ps1 dist\
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_SHA: ${{ github.sha }}
+        shell: pwsh
+        run: |
+          $tag = "build-$env:GITHUB_SHA"
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          $assets = @("dist/1batch.exe", "dist/2batch.exe", "dist/GameOCR.ps1")
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $assets --clobber
+          }
+          else {
+            gh release create $tag $assets `
+              --title "Build $shortSha" `
+              --notes "Automated build for commit $env:GITHUB_SHA."
+          }
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub Release publishing failed (exit code $LASTEXITCODE)"
+          }

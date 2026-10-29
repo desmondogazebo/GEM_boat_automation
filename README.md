@@ -32,6 +32,10 @@ These scripts send keyboard and mouse input to the game. Use them only when the 
 
 The XML files are sanitized Task Scheduler templates. They omit the exporting account and use `%USERPROFILE%` for the script path. Before importing a task, confirm the script is in `%USERPROFILE%\Documents\My Games\Granado Espada M`, confirm AutoHotkey is installed at the path in the XML, and select your Windows account in Task Scheduler. The first-batch task runs at noon on the configured weekdays; the second-batch task runs daily at 9 PM. Adjust the trigger times or paths if needed.
 
+## Releases
+
+Every push to `main` builds both AutoHotkey scripts with Ahk2Exe and publishes a GitHub Release tagged for that commit. Each release includes `1batch.exe`, `2batch.exe`, and `GameOCR.ps1`; keep the helper beside the executable when running it.
+
 ## Repository contents
 
 The task XML templates have been stripped of account names, account SIDs, local absolute paths, and export timestamps. The executables are included as convenience builds; use the `.ahk` sources if you want to review or change the automation.
