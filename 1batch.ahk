@@ -36,6 +36,30 @@ WaitForGameActive() {
 }
 
 
+; Wait up to 5 minutes for the game to be idle, showing the status at the mouse.
+WaitForGameIdle(timeoutMs := 300000) {
+    started := A_TickCount
+
+    loop {
+        WaitForGameActive()
+
+        if WaitForAnyGameText(["Processing Auto Combat", "Waiting", "Moving"], 0) {
+            ToolTip()
+            return true
+        }
+
+        remaining := timeoutMs - (A_TickCount - started)
+        if (remaining <= 0) {
+            ToolTip()
+            return false
+        }
+
+        ToolTip("Game is not AFK - waiting up to " Ceil(remaining / 1000) "s for it to become idle...")
+        Sleep(1000)
+    }
+}
+
+
 ; Count down only while the game is active.
 GameSleep(ms) {
     global gameWin
@@ -94,8 +118,8 @@ AssignShipFirstBatch8h(shipSlot) {
         throw Error("Ship slot must be 1, 2, or 3.")
 
     ; Confirm the game is idle before opening the faction menu.
-    if !WaitForAnyGameText(["Processing Auto Combat", "Waiting", "Moving"], 3000) {
-        MsgBox("Tried to send ships but game was busy, exiting.")
+    if !WaitForGameIdle() {
+        MsgBox("Game was not idle after waiting 5 minutes, exiting.")
         ExitApp()
     }
 

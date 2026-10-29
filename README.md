@@ -24,7 +24,7 @@ Windows automation scripts for assigning ships to trade routes in Granado Espada
 2. Keep `GameOCR.ps1` beside the executable you want to run.
 3. Start Granado Espada M and wait until it is ready, then launch `1batch.exe` or `2batch.exe`. AutoHotkey does not need to be installed.
 
-The script exits if the game process is not running. During automation, it waits for the game window to become active before continuing. It also exits unless the game is idle (showing auto combat, waiting or moving). The ship slots and destinations are set near the top of each `.ahk` source script; edit and recompile them to change the routes.
+The script exits if the game process is not running. During automation, it waits for the game window to become active before continuing. Before sending each ship it needs the game to be idle (showing auto combat, waiting or moving); if not, a tooltip at the mouse shows it is waiting, and the script exits after 5 minutes without the game becoming idle. The ship slots and destinations are set near the top of each `.ahk` source script; edit and recompile them to change the routes.
 
 These scripts send keyboard and mouse input to the game. Use them only when the game is in the expected state, and avoid interacting with the computer while a script is running.
 

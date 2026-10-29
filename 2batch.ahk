@@ -35,6 +35,30 @@ WaitForGameActive() {
 }
 
 
+; Wait up to 5 minutes for the game to be idle, showing the status at the mouse.
+WaitForGameIdle(timeoutMs := 300000) {
+    started := A_TickCount
+
+    loop {
+        WaitForGameActive()
+
+        if WaitForAnyGameText(["Processing Auto Combat", "Waiting", "Moving"], 0) {
+            ToolTip()
+            return true
+        }
+
+        remaining := timeoutMs - (A_TickCount - started)
+        if (remaining <= 0) {
+            ToolTip()
+            return false
+        }
+
+        ToolTip("Game is not AFK - waiting up to " Ceil(remaining / 1000) "s for it to become idle...")
+        Sleep(1000)
+    }
+}
+
+
 ; Count down only while the game is active.
 GameSleep(ms) {
     global gameWin
@@ -101,8 +125,8 @@ AssignShip(shipSlot, destination) {
     if (destination != "Lupala" && destination != "Unguja")
         throw Error("Destination must be Lupala (13h) or Unguja (15h).")
 
-    if !WaitForAnyGameText(["Processing Auto Combat", "Waiting", "Moving"], 3000) {
-        MsgBox("Tried to send ships but game was busy, exiting.")
+    if !WaitForGameIdle() {
+        MsgBox("Game was not idle after waiting 5 minutes, exiting.")
         ExitApp()
     }
 
