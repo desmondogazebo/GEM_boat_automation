@@ -9,20 +9,21 @@ Windows automation scripts for assigning ships to trade routes in Granado Espada
 | `1batch.ahk` | Runs the first-batch route flow for ship slots 1 and 3. The ship 2 call is currently commented out. |
 | `2batch.ahk` | Assigns ship slots 1 and 3 to Lupala (13 hours), and slot 2 to Unguja (15 hours). |
 | `GameOCR.ps1` | Helper used by both AutoHotkey scripts to capture the screen and recognize UI text with Windows OCR. Keep it in the same folder as the `.ahk` scripts. |
-| `1batch.exe`, `2batch.exe` | Precompiled launchers for the matching AutoHotkey scripts. |
+| `1batch.exe`, `2batch.exe` | Standalone compiled launchers for the matching AutoHotkey scripts; AutoHotkey does not need to be installed. Keep `GameOCR.ps1` beside the executable. |
 | `GEMlaunch1.xml`, `GEMlaunch2ndShips.xml` | Windows Task Scheduler task templates for launching the first- and second-batch scripts. |
 
 ## Requirements
 
 - Windows with a compatible Windows OCR language installed.
-- [AutoHotkey v2](https://www.autohotkey.com/) to run the `.ahk` scripts.
 - Granado Espada M running and displaying its UI on the primary monitor.
+- For normal use, download the latest [release](https://github.com/desmondogazebo/GEM_boat_automation/releases/latest). AutoHotkey is not required to run the released `.exe` files.
+- [AutoHotkey v2](https://www.autohotkey.com/) is only needed for development or to run the `.ahk` source scripts.
 
 ## Usage
 
-1. Keep `GameOCR.ps1` beside the AutoHotkey script you want to run.
-2. Start Granado Espada M and wait until it is ready.
-3. Run `1batch.ahk` or `2batch.ahk` with AutoHotkey v2, or launch the matching precompiled `.exe`.
+1. Download `1batch.exe`, `2batch.exe`, and `GameOCR.ps1` from the [latest release](https://github.com/desmondogazebo/GEM_boat_automation/releases/latest).
+2. Keep `GameOCR.ps1` beside the executable you want to run.
+3. Start Granado Espada M and wait until it is ready, then launch `1batch.exe` or `2batch.exe`. AutoHotkey does not need to be installed.
 
 The script exits if the game process is not running. During automation, it waits for the game window to become active before continuing. Review the ship slots and destinations near the top of the selected script before running it.
 
@@ -30,20 +31,12 @@ These scripts send keyboard and mouse input to the game. Use them only when the 
 
 ## Scheduled tasks
 
-The XML files are sanitized Task Scheduler templates. They omit the exporting account and use `%USERPROFILE%` for the script path. Before importing a task, confirm the script is in `%USERPROFILE%\Documents\My Games\Granado Espada M`, confirm AutoHotkey is installed at the path in the XML, and select your Windows account in Task Scheduler. The first-batch task runs at noon on the configured weekdays; the second-batch task runs daily at 9 PM. Adjust the trigger times or paths if needed.
+The XML files are sanitized Task Scheduler templates for running the `.ahk` source scripts. They omit the exporting account and use `%USERPROFILE%` for the script path. Before importing a task, confirm the source script is in `%USERPROFILE%\Documents\My Games\Granado Espada M`, AutoHotkey is installed at the path in the XML, and your Windows account is selected in Task Scheduler. The first-batch task runs at noon on the configured weekdays; the second-batch task runs daily at 9 PM. Adjust the trigger times or paths if needed.
 
 ## Releases
 
-Releases follow [Semantic Versioning](https://semver.org/) and every change is recorded in [CHANGELOG.md](CHANGELOG.md).
-
-To publish a release:
-
-1. Move the entries under `## [Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` section and update the compare links at the bottom of the changelog.
-2. Commit and push to `main`.
-3. Tag the commit and push the tag: `git tag vX.Y.Z` then `git push origin vX.Y.Z`.
-
-The tag triggers a workflow that checks the tag is valid SemVer (pre-releases such as `v1.0.0-rc.1` are marked as pre-releases), builds both scripts with Ahk2Exe, and publishes a GitHub Release containing `1batch.exe`, `2batch.exe` and `GameOCR.ps1`. The release notes are the matching changelog section; the workflow fails if that section is missing or empty. Keep `GameOCR.ps1` beside the executable when running it.
+Download the executables and `GameOCR.ps1` from the [latest GitHub release](https://github.com/desmondogazebo/GEM_boat_automation/releases/latest). Releases are built from version tags and include both executables and the helper file. AutoHotkey is only needed to develop or run the `.ahk` source scripts.
 
 ## Repository contents
 
-The task XML templates have been stripped of account names, account SIDs, local absolute paths, and export timestamps. The executables are included as convenience builds; use the `.ahk` sources if you want to review or change the automation.
+The task XML templates have been stripped of account names, account SIDs, local absolute paths, and export timestamps. Use the `.ahk` sources if you want to review or change the automation.

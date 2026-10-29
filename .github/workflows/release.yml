@@ -15,7 +15,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Validate version and extract release notes
+      - name: Validate version and prepare release notes
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME
@@ -24,13 +24,8 @@ jobs:
           }
           $version = $Matches.version
 
-          $changelog = Get-Content CHANGELOG.md -Raw
-          $pattern = "(?ms)^## \[$([regex]::Escape($version))\][^\r\n]*\r?\n(?<notes>.*?)(?=^## \[|^\[[^\]]+\]: |\z)"
-          if ($changelog -notmatch $pattern -or [string]::IsNullOrWhiteSpace($Matches.notes)) {
-            throw "CHANGELOG.md has no non-empty '## [$version]' section."
-          }
-
-          Set-Content -Path "$env:RUNNER_TEMP\release-notes.md" -Value $Matches.notes.Trim() -Encoding utf8
+          $notes = 'Download 1batch.exe or 2batch.exe and GameOCR.ps1 from the release assets. Keep GameOCR.ps1 beside the executable. AutoHotkey is not required to run the executables.'
+          Set-Content -Path "$env:RUNNER_TEMP\release-notes.md" -Value $notes -Encoding utf8
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Install AutoHotkey v2
