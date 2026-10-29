@@ -58,9 +58,11 @@ jobs:
 
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           foreach ($script in @("1batch", "2batch")) {
-            & $compiler.FullName /in "$PWD\$script.ahk" /out "$PWD\dist\$script.exe" /base $base.FullName
-            if ($LASTEXITCODE -ne 0) {
-              throw "Ahk2Exe failed to compile $script.ahk (exit code $LASTEXITCODE)"
+            # Ahk2Exe is a GUI-subsystem program, so it must be waited on explicitly.
+            $arguments = @("/in", "`"$PWD\$script.ahk`"", "/out", "`"$PWD\dist\$script.exe`"", "/base", "`"$($base.FullName)`"")
+            $process = Start-Process -FilePath $compiler.FullName -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+            if ($process.ExitCode -ne 0 -or -not (Test-Path "dist\$script.exe")) {
+              throw "Ahk2Exe failed to compile $script.ahk (exit code $($process.ExitCode))"
             }
           }
 
