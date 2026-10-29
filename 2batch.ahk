@@ -154,11 +154,11 @@ AssignShip(shipSlot, destination) {
     confirmBounds := WaitForGameTextBounds("Confirm")
     GameClickTextBounds(confirmBounds)
 
-    autoTeamBounds := WaitForGameTextBounds("Auto Team Setting")
-    GameClickTextBounds(autoTeamBounds)
-
     dispatchBounds := WaitForGameTextBounds("Preparation For Dispatch")
     GameClickTextBounds(dispatchBounds)
+
+    autoTeamBounds := WaitForGameTextBounds("Auto Team Setting")
+    GameClickTextBounds(autoTeamBounds)
 
     startTradeBounds := WaitForGameTextBounds("Start Trade")
     GameClickTextBounds(startTradeBounds)
