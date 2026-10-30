@@ -1,0 +1,35 @@
+name: Notify Discord of release
+
+on:
+  workflow_run:
+    workflows: ["Build and release"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post release to Discord
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TAG: ${{ github.event.workflow_run.head_branch }}
+          REPO: ${{ github.repository }}
+        run: |
+          release=$(gh api "repos/$REPO/releases/tags/$TAG")
+          payload=$(jq -n --argjson r "$release" '{
+            username: "Release Notifier",
+            embeds: [{
+              title: ($r.name // $r.tag_name),
+              url: $r.html_url,
+              description: (($r.body // "") | .[0:4000]),
+              color: 2105893,
+              timestamp: $r.published_at,
+              footer: {text: "Changelog"}
+            }]
+          }')
+          curl -sS --fail -H "Content-Type: application/json" -d "$payload" "$WEBHOOK_URL"
