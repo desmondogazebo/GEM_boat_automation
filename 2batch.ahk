@@ -228,16 +228,22 @@ WaitForNearbyGameTextBounds(expectedText, anchorBounds, timeoutMs := 30000) {
         boundsList := ReadGameOCR(expectedText, 1, true)
         anchorCenterX := anchorBounds.X + anchorBounds.Width / 2
         nearestBounds := ""
-        nearestDistance := ""
+        nearestVerticalDistance := ""
+        nearestHorizontalDistance := ""
 
         for bounds in boundsList {
             if (bounds.Y <= anchorBounds.Y + anchorBounds.Height)
                 continue
 
-            distance := Abs(bounds.X + bounds.Width / 2 - anchorCenterX)
-            if (nearestDistance = "" || distance < nearestDistance) {
+            verticalDistance := bounds.Y - (anchorBounds.Y + anchorBounds.Height)
+            horizontalDistance := Abs(bounds.X + bounds.Width / 2 - anchorCenterX)
+            if (nearestVerticalDistance = ""
+                || verticalDistance < nearestVerticalDistance
+                || (verticalDistance = nearestVerticalDistance
+                    && horizontalDistance < nearestHorizontalDistance)) {
                 nearestBounds := bounds
-                nearestDistance := distance
+                nearestVerticalDistance := verticalDistance
+                nearestHorizontalDistance := horizontalDistance
             }
         }
 
