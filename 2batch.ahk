@@ -139,13 +139,14 @@ AssignShip(shipSlot, destination) {
     costaLakeBounds := WaitForCostaLakeSlot(shipSlot)
     GameClickTextBounds(costaLakeBounds)
     enzaronBounds := WaitForGameTextBounds("Enzaron")
-
     prepareButtonBounds := WaitForNearbyGameTextBounds("Prepare for Trade", enzaronBounds)
+
     scrollX := prepareButtonBounds.X + prepareButtonBounds.Width / 2
     scrollY := prepareButtonBounds.Y + prepareButtonBounds.Height / 2 - 300
     GameMove(scrollX, scrollY)
     Loop 50
         GameSend("{WheelUp}")
+    GameSleep(1000) ;this is to allow the game to finish scrolling before interacting with the destination
 
     destinationBounds := WaitForGameTextBounds(destination)
     prepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", destinationBounds)
