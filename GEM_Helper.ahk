@@ -182,7 +182,7 @@ AssignShip(shipSlot, destination := "") {
     }
 
     GameSend("{Esc}")
-    GameSend("g")                 ; Open faction
+    GameSend("g")                   ; Open faction
     tradeBounds := WaitForGameTextBounds("Trade")
 
     GameClickTextBounds(tradeBounds)
@@ -206,8 +206,7 @@ AssignShip(shipSlot, destination := "") {
     }
 
     GameClickTextBounds(prepareBounds)
-    GameSleep(2000) ;this is to allow the game to finish processing before clicking confirm
-    confirmBounds := WaitForGameTextBounds("Confirm")
+    confirmBounds := WaitForGameTextBounds("Confirm", 30000, false, 2)
     GameClickTextBounds(confirmBounds)
 
     dispatchBounds := WaitForGameTextBounds("Preparation For Dispatch")
