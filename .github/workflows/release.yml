@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate version and prepare release notes
         shell: pwsh
@@ -25,6 +27,11 @@ jobs:
           $version = $Matches.version
 
           $notes = 'Download GEM_Helper.exe and GameOCR.ps1 from the release assets. Keep GameOCR.ps1 beside the executable. AutoHotkey is not required to run the executables.'
+          $previousTag = git describe --tags --abbrev=0 "$tag^" 2>$null
+          $range = if ($LASTEXITCODE -eq 0 -and $previousTag) { "$previousTag..$tag" } else { $tag }
+          $commits = git log $range --no-merges --format='- %s (%h)'
+          $changelog = if ($commits) { "## Changes`n`n" + ($commits -join "`n") + "`n`n" } else { "" }
+          $notes = $changelog + $notes
           Set-Content -Path "$env:RUNNER_TEMP\release-notes.md" -Value $notes -Encoding utf8
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
