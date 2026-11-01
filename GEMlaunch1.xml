@@ -47,7 +47,8 @@
   </Settings>
   <Actions Context="CurrentUser">
     <Exec>
-      <Command>"%USERPROFILE%\Documents\My Games\Granado Espada M\1batch.exe"</Command>
+      <Command>"%USERPROFILE%\Documents\My Games\Granado Espada M\GEM_Helper.exe"</Command>
+      <Arguments>sendShips 1</Arguments>
     </Exec>
   </Actions>
 </Task>

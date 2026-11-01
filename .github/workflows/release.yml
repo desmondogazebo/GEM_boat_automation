@@ -24,7 +24,7 @@ jobs:
           }
           $version = $Matches.version
 
-          $notes = 'Download 1batch.exe or 2batch.exe and GameOCR.ps1 from the release assets. Keep GameOCR.ps1 beside the executable. AutoHotkey is not required to run the executables.'
+          $notes = 'Download GEM_Helper.exe and GameOCR.ps1 from the release assets. Keep GameOCR.ps1 beside the executable. AutoHotkey is not required to run the executables.'
           Set-Content -Path "$env:RUNNER_TEMP\release-notes.md" -Value $notes -Encoding utf8
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
@@ -70,7 +70,7 @@ jobs:
           }
 
           New-Item -ItemType Directory -Path dist -Force | Out-Null
-          foreach ($script in @("1batch", "2batch")) {
+          foreach ($script in @("GEM_Helper")) {
             # Ahk2Exe is a GUI-subsystem program, so it must be waited on explicitly.
             $arguments = @("/in", "`"$PWD\$script.ahk`"", "/out", "`"$PWD\dist\$script.exe`"", "/base", "`"$($base.FullName)`"")
             $process = Start-Process -FilePath $compiler.FullName -ArgumentList $arguments -Wait -PassThru -NoNewWindow
@@ -88,7 +88,7 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $notes = "$env:RUNNER_TEMP\release-notes.md"
-          $assets = @("dist/1batch.exe", "dist/2batch.exe", "dist/GameOCR.ps1")
+          $assets = @("dist/GEM_Helper.exe", "dist/GameOCR.ps1")
           $prerelease = if ($env:VERSION.Contains("-")) { @("--prerelease") } else { @() }
 
           gh release view $tag *> $null

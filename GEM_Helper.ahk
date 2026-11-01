@@ -6,21 +6,68 @@ CoordMode("Mouse", "Screen")
 gameExe := "GRANADO ESPADA M.exe"
 gameWin := "ahk_exe " gameExe
 
-; Activate game or exit.
-if !WinExist(gameWin)
-    ExitApp()
+; Pass --debug anywhere in the arguments to save annotated OCR screenshots
+; (red boxes/lines) to %TEMP%\GameOCR_debug.png after every OCR read.
+; Debug is on by default for now; pass --no-debug to turn it off.
+debugOCR := true
+scriptArgs := []
+for arg in A_Args {
+    if (arg = "--debug")
+        debugOCR := true
+    else if (arg = "--no-debug")
+        debugOCR := false
+    else
+        scriptArgs.Push(arg)
+}
 
-WinActivate(gameWin)
+; Usage: GEM.exe <function> [args...] [--debug]   e.g. GEM.exe sendShips 1
+if (scriptArgs.Length < 1)
+    ExitWithMessage("Usage: GEM <function> [args] [--debug]`nAvailable functions: sendShips <batchNumber>")
 
-if !WinWaitActive(gameWin, , 3)
-    ExitApp()
-
-; Assign ships.
-AssignShipFirstBatch8h(1)    ; Ship 1
-;AssignShipFirstBatch8h(2)  ; Ship 2
-AssignShipFirstBatch8h(3)  ; Ship 3
+functionName := scriptArgs[1]
+switch StrLower(functionName) {
+    case "sendships":
+        if (scriptArgs.Length < 2)
+            ExitWithMessage("Usage: GEM sendShips <batchNumber>")
+        sendShips(scriptArgs[2] + 0)
+    default:
+        ExitWithMessage("Unknown function: " functionName)
+}
 
 ExitApp()
+
+
+ExitWithMessage(message) {
+    MsgBox(message)
+    ExitApp()
+}
+
+
+; Send the ships of a batch on their trade routes.
+;   Batch 1: ships 1 and 3 on the first available route.
+;   Batch 2: ships 1 and 3 to Lupala (13h), ship 2 to Unguja (15h).
+sendShips(batchNumber) {
+    ; Activate game or exit.
+    if !WinExist(gameWin)
+        ExitApp()
+
+    WinActivate(gameWin)
+
+    if !WinWaitActive(gameWin, , 3)
+        ExitApp()
+
+    switch batchNumber {
+        case 1:
+            AssignShip(1)
+            AssignShip(3)
+        case 2:
+            AssignShip(1, "Lupala")
+            AssignShip(2, "Unguja")
+            AssignShip(3, "Lupala")
+        default:
+            ExitWithMessage("Unknown batch number: " batchNumber)
+    }
+}
 
 
 ; Wait until the game is active.
@@ -113,9 +160,20 @@ GameClickTextBounds(bounds) {
 }
 
 
-AssignShipFirstBatch8h(shipSlot) {
+GameMove(x, y) {
+    WaitForGameActive()
+    viewport := GetGameViewport()
+    MouseMove(Round(viewport.X + x), Round(viewport.Y + y))
+}
+
+
+; destination is "Lupala" (13h), "Unguja" (15h), or empty for the default (first) route.
+AssignShip(shipSlot, destination := "") {
     if (shipSlot < 1 || shipSlot > 3)
         throw Error("Ship slot must be 1, 2, or 3.")
+
+    if (destination != "" && destination != "Lupala" && destination != "Unguja")
+        throw Error("Destination must be Lupala (13h) or Unguja (15h).")
 
     ; Confirm the game is idle before opening the faction menu.
     if !WaitForGameIdle() {
@@ -134,8 +192,21 @@ AssignShipFirstBatch8h(shipSlot) {
     enzaronBounds := WaitForGameTextBounds("Enzaron")
 
     prepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", enzaronBounds)
+
+    if (destination != "") {
+        scrollX := prepareBounds.X + prepareBounds.Width / 2
+        scrollY := prepareBounds.Y + prepareBounds.Height / 2 - 300
+        GameMove(scrollX, scrollY)
+        Loop 50
+            GameSend("{WheelUp}")
+        GameSleep(1000) ;this is to allow the game to finish scrolling before interacting with the destination
+
+        destinationBounds := WaitForGameTextBounds(destination)
+        prepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", destinationBounds)
+    }
+
     GameClickTextBounds(prepareBounds)
-    GameSleep(1000) ;this is to allow the game to finish processing before clicking confirm
+    GameSleep(2000) ;this is to allow the game to finish processing before clicking confirm
     confirmBounds := WaitForGameTextBounds("Confirm")
     GameClickTextBounds(confirmBounds)
 
@@ -267,6 +338,9 @@ ReadGameOCR(targetText := "", targetIndex := 1, returnAllMatches := false) {
 
         if returnAllMatches
             command .= ' -ReturnAllMatches'
+
+        if debugOCR
+            command .= ' -DebugMode'
 
         exitCode := RunWait(command, , "Hide")
         WaitForGameActive()

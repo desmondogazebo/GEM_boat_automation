@@ -7,7 +7,9 @@ param(
     [string]$OutputFile = "$env:TEMP\GameOCR.txt",
     [string]$TargetText = "",
     [int]$TargetIndex = 1,
-    [switch]$ReturnAllMatches
+    [switch]$ReturnAllMatches,
+    [switch]$DebugMode,
+    [string]$DebugImageFile = "$env:TEMP\GameOCR_debug.png"
 )
 
 $ErrorActionPreference = "Stop"
@@ -74,7 +76,62 @@ try {
         return 1.0 - ($previous[$Right.Length] / $length)
     }
 
+    # Draws red lines on the captured screenshot: thin boxes for every OCR word,
+    # dashed boxes for near-match candidates, thick boxes for exact matches, and
+    # crosshair lines to the point that will be clicked.
+    function Save-DebugImage($SourcePath, $DestinationPath, $OcrResult, $NearMatches, $ExactMatches, $Selected, $Label) {
+        $image = [System.Drawing.Bitmap]::new($SourcePath)
+        $canvas = [System.Drawing.Graphics]::FromImage($image)
+        $thin = [System.Drawing.Pen]::new([System.Drawing.Color]::Red, 1)
+        $dashed = [System.Drawing.Pen]::new([System.Drawing.Color]::Red, 2)
+        $dashed.DashStyle = [System.Drawing.Drawing2D.DashStyle]::Dash
+        $thick = [System.Drawing.Pen]::new([System.Drawing.Color]::Red, 3)
+        $font = [System.Drawing.Font]::new("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+        $brush = [System.Drawing.Brushes]::Red
+
+        try {
+            foreach ($line in $OcrResult.Lines) {
+                foreach ($word in $line.Words) {
+                    $r = $word.BoundingRect
+                    $canvas.DrawRectangle($thin, [single]$r.X, [single]$r.Y, [single]$r.Width, [single]$r.Height)
+                }
+            }
+
+            foreach ($near in $NearMatches) {
+                $b = $near.Bounds
+                $canvas.DrawRectangle($dashed, [single]($b.X - $X), [single]($b.Y - $Y), [single]$b.Width, [single]$b.Height)
+                $canvas.DrawString(("{0:P0}" -f $near.Similarity), $font, $brush, [single]($b.X - $X), [single]([math]::Max(0, $b.Y - $Y - 18)))
+            }
+
+            foreach ($b in $ExactMatches) {
+                $canvas.DrawRectangle($thick, [single]($b.X - $X), [single]($b.Y - $Y), [single]$b.Width, [single]$b.Height)
+            }
+
+            foreach ($b in $Selected) {
+                $cx = [single]($b.X - $X + $b.Width / 2)
+                $cy = [single]($b.Y - $Y + $b.Height / 2)
+                $canvas.DrawLine($thick, [single]0, $cy, [single]$image.Width, $cy)
+                $canvas.DrawLine($thick, $cx, [single]0, $cx, [single]$image.Height)
+                $canvas.DrawString("click ($([int]($b.X + $b.Width / 2)), $([int]($b.Y + $b.Height / 2)))", $font, $brush, $cx + 6, $cy + 6)
+            }
+
+            if ($Label) {
+                $canvas.DrawString($Label, $font, $brush, 4, 4)
+            }
+
+            $image.Save($DestinationPath, [System.Drawing.Imaging.ImageFormat]::Png)
+        }
+        finally {
+            $font.Dispose(); $thin.Dispose(); $dashed.Dispose(); $thick.Dispose()
+            $canvas.Dispose(); $image.Dispose()
+        }
+    }
+
     $imagePath = "$env:TEMP\GameOCR.png"
+    $debugExact = @()
+    $debugNear = @()
+    $debugSelected = @()
+    $debugLabel = "OCR (all words)"
 
     $bitmap = [System.Drawing.Bitmap]::new($Width, $Height)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
@@ -204,6 +261,16 @@ try {
             }
         }
 
+        $debugExact = $ocrMatches
+        $debugNear = $ocrNearMatches
+        $debugLabel = "Target: '$TargetText' exact=$($ocrMatches.Count) near=$($ocrNearMatches.Count)"
+        if ($ReturnAllMatches) {
+            $debugSelected = $sortedMatches
+        }
+        elseif ($TargetIndex -le $sortedMatches.Count) {
+            $debugSelected = @($sortedMatches[$TargetIndex - 1])
+        }
+
         if ($ReturnAllMatches -and $sortedMatches.Count -gt 0) {
             $output = ($sortedMatches | ForEach-Object {
                 "$($_.X)|$($_.Y)|$($_.Width)|$($_.Height)"
@@ -232,6 +299,10 @@ try {
     }
 
     $stream.Dispose()
+
+    if ($DebugMode) {
+        try { Save-DebugImage $imagePath $DebugImageFile $result $debugNear $debugExact $debugSelected $debugLabel } catch { }
+    }
 }
 catch {
     [System.IO.File]::WriteAllText(
