@@ -151,7 +151,7 @@ AssignShip(shipSlot, destination) {
     destinationBounds := WaitForGameTextBounds(destination)
     prepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", destinationBounds)
     GameClickTextBounds(prepareBounds)
-
+    GameSleep(1000) ;this is to allow the game to finish processing before clicking confirm
     confirmBounds := WaitForGameTextBounds("Confirm")
     GameClickTextBounds(confirmBounds)
 

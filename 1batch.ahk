@@ -135,7 +135,7 @@ AssignShipFirstBatch8h(shipSlot) {
 
     prepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", enzaronBounds)
     GameClickTextBounds(prepareBounds)
-
+    GameSleep(1000) ;this is to allow the game to finish processing before clicking confirm
     confirmBounds := WaitForGameTextBounds("Confirm")
     GameClickTextBounds(confirmBounds)
 
