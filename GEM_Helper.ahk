@@ -196,12 +196,23 @@ AssignShip(shipSlot, destination := "") {
     if (destination != "") {
         scrollX := prepareBounds.X + prepareBounds.Width / 2
         scrollY := prepareBounds.Y + prepareBounds.Height / 2 - 300
-        GameMove(scrollX, scrollY)
-        Loop 50
-            GameSend("{WheelUp}")
-        GameSleep(1000) ;this is to allow the game to finish scrolling before interacting with the destination
+        destinationBounds := ""
 
-        destinationBounds := WaitForGameTextBounds(destination)
+        ; Re-aim and re-scroll if the destination isn't visible, in case the list didn't scroll or OCR missed it.
+        Loop 3 {
+            GameMove(scrollX, scrollY)
+            Loop 50
+                GameSend("{WheelUp}")
+            GameSleep(1000) ;this is to allow the game to finish scrolling before interacting with the destination
+
+            destinationBounds := WaitForGameTextBounds(destination, 4000, true)
+            if IsObject(destinationBounds)
+                break
+        }
+
+        if !IsObject(destinationBounds)
+            destinationBounds := WaitForGameTextBounds(destination)
+
         prepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", destinationBounds)
     }
 
