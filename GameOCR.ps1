@@ -58,7 +58,7 @@ try {
             $current[0] = $row
 
             for ($column = 1; $column -le $Right.Length; $column++) {
-                $cost = if ($Left[$row - 1] -eq $Right[$column - 1]) { 0 } else { 1 }
+                $cost = if ($Left[$row - 1] -ceq $Right[$column - 1]) { 0 } else { 1 }
                 $current[$column] = [math]::Min(
                     [math]::Min($current[$column - 1] + 1, $previous[$column] + 1),
                     $previous[$column - 1] + $cost
@@ -176,7 +176,7 @@ try {
         )
     }
     else {
-        $normalizedTarget = [regex]::Replace($TargetText, '[^\p{L}\p{N}]', '').ToLowerInvariant()
+        $normalizedTarget = [regex]::Replace($TargetText, '[^\p{L}\p{N}]', '')
         $targetLength = $normalizedTarget.Length
         $ocrMatches = [System.Collections.Generic.List[object]]::new()
         $ocrNearMatches = [System.Collections.Generic.List[object]]::new()
@@ -193,15 +193,20 @@ try {
                         $words[$end].Text,
                         '[^\p{L}\p{N}]',
                         ''
-                    ).ToLowerInvariant()
+                    )
 
                     if ($candidate.Length -gt $maximumCandidateLength) {
                         break
                     }
 
-                    $isExactMatch = $candidate -eq $normalizedTarget
+                    $isExactMatch = $candidate -ceq $normalizedTarget
                     $similarity = Get-CharacterSimilarity $candidate $normalizedTarget
-                    $isNearMatch = !$isExactMatch -and $similarity -gt 0.5
+                    $isCaseOnlyMismatch = !$isExactMatch -and [string]::Equals(
+                        $candidate,
+                        $normalizedTarget,
+                        [System.StringComparison]::OrdinalIgnoreCase
+                    )
+                    $isNearMatch = !$isExactMatch -and !$isCaseOnlyMismatch -and $similarity -gt 0.5
 
                     if ($isExactMatch -or $isNearMatch) {
                         $matchedWords = $words[$start..$end]

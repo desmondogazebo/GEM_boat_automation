@@ -182,7 +182,7 @@ AssignShip(shipSlot, destination := "") {
     }
 
     GameSend("{Esc}")
-    GameSend("g")                   ; Open faction
+    GameSend("g")                 ; Open faction
     tradeBounds := WaitForGameTextBounds("Trade")
 
     GameClickTextBounds(tradeBounds)
@@ -196,28 +196,18 @@ AssignShip(shipSlot, destination := "") {
     if (destination != "") {
         scrollX := prepareBounds.X + prepareBounds.Width / 2
         scrollY := prepareBounds.Y + prepareBounds.Height / 2 - 300
-        destinationBounds := ""
+        GameMove(scrollX, scrollY)
+        Loop 50
+            GameSend("{WheelUp}")
+        GameSleep(1000) ;this is to allow the game to finish scrolling before interacting with the destination
 
-        ; Re-aim and re-scroll if the destination isn't visible, in case the list didn't scroll or OCR missed it.
-        Loop 3 {
-            GameMove(scrollX, scrollY)
-            Loop 50
-                GameSend("{WheelUp}")
-            GameSleep(1000) ;this is to allow the game to finish scrolling before interacting with the destination
-
-            destinationBounds := WaitForGameTextBounds(destination, 4000, true)
-            if IsObject(destinationBounds)
-                break
-        }
-
-        if !IsObject(destinationBounds)
-            destinationBounds := WaitForGameTextBounds(destination)
-
+        destinationBounds := WaitForGameTextBounds(destination)
         prepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", destinationBounds)
     }
 
     GameClickTextBounds(prepareBounds)
-    confirmBounds := WaitForGameTextBounds("Confirm", 30000, false, 2)
+    GameSleep(2000) ;this is to allow the game to finish processing before clicking confirm
+    confirmBounds := WaitForGameTextBounds("Confirm")
     GameClickTextBounds(confirmBounds)
 
     dispatchBounds := WaitForGameTextBounds("Preparation For Dispatch")
