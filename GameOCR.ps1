@@ -199,7 +199,11 @@ try {
                         break
                     }
 
-                    $isExactMatch = $candidate -ceq $normalizedTarget
+                    $isExactMatch = [string]::Equals(
+                        $candidate,
+                        $normalizedTarget,
+                        [System.StringComparison]::Ordinal
+                    )
                     $similarity = Get-CharacterSimilarity $candidate $normalizedTarget
                     $isCaseOnlyMismatch = !$isExactMatch -and [string]::Equals(
                         $candidate,
