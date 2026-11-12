@@ -4,10 +4,12 @@ param(
     [int]$Y = 700,
     [int]$Width = 430,
     [int]$Height = 40,
+    [long]$GameWindowHandle = 0,
     [string]$OutputFile = "$env:TEMP\GameOCR.txt",
     [string]$TargetText = "",
     [int]$TargetIndex = 1,
     [switch]$ReturnAllMatches,
+    [switch]$ExactMatchOnly,
     [switch]$DebugMode,
     [string]$DebugImageFile = "$env:TEMP\GameOCR_debug.png"
 )
@@ -17,6 +19,17 @@ $ErrorActionPreference = "Stop"
 try {
     Add-Type -AssemblyName System.Drawing
     Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+    if ($GameWindowHandle -ne 0) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class GameOcrWindow {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+}
+'@
+    }
 
     $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
     $null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
@@ -137,10 +150,19 @@ try {
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 
     try {
+        if ($GameWindowHandle -ne 0 -and [GameOcrWindow]::GetForegroundWindow().ToInt64() -ne $GameWindowHandle) {
+            [System.IO.File]::WriteAllText($OutputFile, "OCR_INACTIVE", [System.Text.UTF8Encoding]::new($false))
+            return
+        }
+
         $graphics.CopyFromScreen(
             $X, $Y, 0, 0,
             [System.Drawing.Size]::new($Width, $Height)
         )
+        if ($GameWindowHandle -ne 0 -and [GameOcrWindow]::GetForegroundWindow().ToInt64() -ne $GameWindowHandle) {
+            [System.IO.File]::WriteAllText($OutputFile, "OCR_INACTIVE", [System.Text.UTF8Encoding]::new($false))
+            return
+        }
         $bitmap.Save($imagePath, [System.Drawing.Imaging.ImageFormat]::Png)
     }
     finally {
@@ -181,6 +203,7 @@ try {
         $ocrMatches = [System.Collections.Generic.List[object]]::new()
         $ocrNearMatches = [System.Collections.Generic.List[object]]::new()
         $maximumCandidateLength = $targetLength * 2
+        $checkNearMatches = !$ExactMatchOnly -or $DebugMode
 
         foreach ($line in $result.Lines) {
             $words = @($line.Words)
@@ -202,15 +225,15 @@ try {
                     $isExactMatch = [string]::Equals(
                         $candidate,
                         $normalizedTarget,
-                        [System.StringComparison]::Ordinal
-                    )
-                    $similarity = Get-CharacterSimilarity $candidate $normalizedTarget
-                    $isCaseOnlyMismatch = !$isExactMatch -and [string]::Equals(
-                        $candidate,
-                        $normalizedTarget,
                         [System.StringComparison]::OrdinalIgnoreCase
                     )
-                    $isNearMatch = !$isExactMatch -and !$isCaseOnlyMismatch -and $similarity -gt 0.5
+                    $isNearMatch = $false
+                    if (!$isExactMatch -and $checkNearMatches -and ![string]::Equals(
+                        $candidate, $normalizedTarget, [System.StringComparison]::OrdinalIgnoreCase
+                    )) {
+                        $similarity = Get-CharacterSimilarity $candidate $normalizedTarget
+                        $isNearMatch = $similarity -gt 0.5
+                    }
 
                     if ($isExactMatch -or $isNearMatch) {
                         $matchedWords = $words[$start..$end]
@@ -250,7 +273,7 @@ try {
             @{ Expression = { $_.Y }; Ascending = $true }, `
             @{ Expression = { $_.X }; Ascending = $true })
 
-        if ($sortedMatches.Count -eq 0 -and $ocrNearMatches.Count -gt 0) {
+        if (!$ExactMatchOnly -and $sortedMatches.Count -eq 0 -and $ocrNearMatches.Count -gt 0) {
             $bestSimilarity = ($ocrNearMatches | Measure-Object -Property Similarity -Maximum).Maximum
             $bestBoundsByPosition = @{}
             foreach ($nearMatch in $ocrNearMatches) {

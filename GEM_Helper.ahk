@@ -207,8 +207,7 @@ AssignShip(shipSlot, destination := "") {
 
     GameClickTextBounds(prepareBounds)
     GameSleep(2000) ;this is to allow the game to finish processing before clicking confirm
-    confirmBounds := WaitForGameTextBounds("Confirm")
-    GameClickTextBounds(confirmBounds)
+    ConfirmTrade()
 
     dispatchBounds := WaitForGameTextBounds("Preparation For Dispatch")
     GameClickTextBounds(dispatchBounds)
@@ -224,6 +223,52 @@ AssignShip(shipSlot, destination := "") {
     GameSend("z")
     WaitForAnyGameText(["Processing Auto Combat", "Waiting", "Moving"])
 }
+
+
+ConfirmTrade(timeoutMs := 30000) {
+    confirmClicked := false
+    confirmElapsed := 0
+    loop {
+        cancelBoundsList := ReadGameOCR("Cancel", 1, true, true)
+        if (cancelBoundsList.Length = 0) {
+            if confirmClicked
+                return
+        } else {
+            if (cancelBoundsList.Length != 1)
+                throw Error("Multiple Cancel matches found in the trade confirmation.")
+
+            cancelBounds := cancelBoundsList[1]
+            viewport := GetGameViewport()
+            rowCenter := cancelBounds.Y + cancelBounds.Height / 2
+            rowMargin := Max(24, cancelBounds.Height)
+            rowLeft := Ceil(cancelBounds.X + cancelBounds.Width)
+            rowTop := Max(0, Floor(rowCenter - rowMargin))
+            rowBottom := Min(viewport.Height, Ceil(rowCenter + rowMargin))
+            if (rowLeft >= viewport.Width || rowBottom <= rowTop)
+                throw Error("Invalid Cancel bounds for the trade confirmation.")
+
+            confirmRegion := {
+                X: rowLeft,
+                Y: rowTop,
+                Width: viewport.Width - rowLeft,
+                Height: rowBottom - rowTop
+            }
+            confirmBoundsList := ReadGameOCR("Confirm", 1, true, false, confirmRegion)
+            for confirmBounds in confirmBoundsList {
+                GameClickTextBounds(confirmBounds)
+                confirmClicked := true
+            }
+        }
+
+        if (confirmElapsed >= timeoutMs) {
+            MsgBox("Could not find or clear Confirm next to Cancel.")
+            ExitApp()
+        }
+        GameSleep(500)
+        confirmElapsed += 500
+    }
+}
+
 
 WaitForCostaLakeSlot(shipSlot) {
     return WaitForGameTextBounds("Costa Lake", 30000, false, shipSlot)
@@ -312,7 +357,7 @@ WaitForNearbyGameTextBounds(expectedText, anchorBounds, timeoutMs := 30000) {
 }
 
 
-ReadGameOCR(targetText := "", targetIndex := 1, returnAllMatches := false) {
+ReadGameOCR(targetText := "", targetIndex := 1, returnAllMatches := false, exactMatchOnly := false, region := "") {
     global gameWin
     psScript := A_ScriptDir "\GameOCR.ps1"
     outputFile := A_Temp "\GameOCR.txt"
@@ -324,13 +369,18 @@ ReadGameOCR(targetText := "", targetIndex := 1, returnAllMatches := false) {
         WaitForGameActive()
         try FileDelete(outputFile)
         viewport := GetGameViewport()
+        gameWindowHandle := WinExist(gameWin)
+        if !gameWindowHandle
+            throw Error("Game window was not found.")
+        capture := IsObject(region) ? region : {X: 0, Y: 0, Width: viewport.Width, Height: viewport.Height}
 
         command := 'powershell.exe -NoProfile -ExecutionPolicy Bypass'
             . ' -File "' psScript '"'
-            . ' -X ' viewport.X
-            . ' -Y ' viewport.Y
-            . ' -Width ' viewport.Width
-            . ' -Height ' viewport.Height
+            . ' -X ' (viewport.X + capture.X)
+            . ' -Y ' (viewport.Y + capture.Y)
+            . ' -Width ' capture.Width
+            . ' -Height ' capture.Height
+            . ' -GameWindowHandle ' gameWindowHandle
             . ' -OutputFile "' outputFile '"'
 
         if (targetText != "")
@@ -339,10 +389,14 @@ ReadGameOCR(targetText := "", targetIndex := 1, returnAllMatches := false) {
         if returnAllMatches
             command .= ' -ReturnAllMatches'
 
+        if exactMatchOnly
+            command .= ' -ExactMatchOnly'
+
         if debugOCR
             command .= ' -DebugMode'
 
         exitCode := RunWait(command, , "Hide")
+        wasGameActive := WinActive("ahk_id " gameWindowHandle)
         WaitForGameActive()
 
         if !FileExist(outputFile)
@@ -354,7 +408,7 @@ ReadGameOCR(targetText := "", targetIndex := 1, returnAllMatches := false) {
         if (exitCode != 0 || InStr(text, "OCR_ERROR:") = 1)
             throw Error("OCR failed: " text)
 
-        if !WinActive(gameWin)
+        if (!wasGameActive || text = "OCR_INACTIVE" || !WinActive("ahk_id " gameWindowHandle))
             continue
 
         if (targetText != "") {
