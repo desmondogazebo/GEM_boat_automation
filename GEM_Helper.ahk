@@ -206,7 +206,7 @@ AssignShip(shipSlot, destination := "") {
     }
 
     GameClickTextBounds(prepareBounds)
-    GameSleep(2000) ;this is to allow the game to finish processing before clicking confirm
+    GameSleep(300) ;this is to allow the game to finish processing before clicking confirm
     ConfirmTrade()
 
     dispatchBounds := WaitForGameTextBounds("Preparation For Dispatch")
@@ -225,48 +225,22 @@ AssignShip(shipSlot, destination := "") {
 }
 
 
-ConfirmTrade(timeoutMs := 30000) {
-    confirmClicked := false
-    confirmElapsed := 0
-    loop {
-        cancelBoundsList := ReadGameOCR("Cancel", 1, true, true)
-        if (cancelBoundsList.Length = 0) {
-            if confirmClicked
-                return
-        } else {
-            if (cancelBoundsList.Length != 1)
-                throw Error("Multiple Cancel matches found in the trade confirmation.")
+ConfirmTrade() {
+    confirmOffsetX := 290
+    cancelBoundsList := ReadGameOCR("Cancel", 1, true, true)
+    if (cancelBoundsList.Length = 0)
+        throw Error("Cancel was not found in the trade confirmation.")
+    if (cancelBoundsList.Length != 1)
+        throw Error("Multiple Cancel matches found in the trade confirmation.")
 
-            cancelBounds := cancelBoundsList[1]
-            viewport := GetGameViewport()
-            rowCenter := cancelBounds.Y + cancelBounds.Height / 2
-            rowMargin := Max(24, cancelBounds.Height)
-            rowLeft := Ceil(cancelBounds.X + cancelBounds.Width)
-            rowTop := Max(0, Floor(rowCenter - rowMargin))
-            rowBottom := Min(viewport.Height, Ceil(rowCenter + rowMargin))
-            if (rowLeft >= viewport.Width || rowBottom <= rowTop)
-                throw Error("Invalid Cancel bounds for the trade confirmation.")
+    cancelBounds := cancelBoundsList[1]
+    viewport := GetGameViewport()
+    confirmX := cancelBounds.X + cancelBounds.Width / 2 + confirmOffsetX
+    confirmY := cancelBounds.Y + cancelBounds.Height / 2
+    if (confirmX < 0 || confirmX >= viewport.Width || confirmY < 0 || confirmY >= viewport.Height)
+        throw Error("Confirm offset is outside the game viewport.")
 
-            confirmRegion := {
-                X: rowLeft,
-                Y: rowTop,
-                Width: viewport.Width - rowLeft,
-                Height: rowBottom - rowTop
-            }
-            confirmBoundsList := ReadGameOCR("Confirm", 1, true, false, confirmRegion)
-            for confirmBounds in confirmBoundsList {
-                GameClickTextBounds(confirmBounds)
-                confirmClicked := true
-            }
-        }
-
-        if (confirmElapsed >= timeoutMs) {
-            MsgBox("Could not find or clear Confirm next to Cancel.")
-            ExitApp()
-        }
-        GameSleep(500)
-        confirmElapsed += 500
-    }
+    GameClick(confirmX, confirmY)
 }
 
 
