@@ -1,0 +1,22 @@
+{
+  "serverUrl": "http://127.0.0.1:8000",
+  "discordId": "",
+  "gameProcessNames": [
+    "GranadoEspadaM"
+  ],
+  "deathScreenCrop": null,
+  "monitorIntervalMinutes": 30,
+  "heartbeatIntervalMinutes": 15,
+  "ocrExecutable": "tesseract",
+  "ocrLanguage": "eng",
+  "deathKeywords": [
+    "death",
+    "dead",
+    "killed"
+  ],
+  "fieldLabels": {
+    "victim": "Victim",
+    "killer": "Killer",
+    "deathTime": "Death time"
+  }
+}

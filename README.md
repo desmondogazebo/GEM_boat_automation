@@ -41,6 +41,10 @@ The XML files are sanitized Task Scheduler templates that run the compiled execu
 
 Download the executable and `GameOCR.ps1` from the [latest GitHub release](https://github.com/desmondogazebo/GEM_boat_automation/releases/latest). Releases are built from version tags and include the executable and the helper file. AutoHotkey is only needed to develop or run the `.ahk` source scripts.
 
+## Death monitoring
+
+The separate [DeathChecker module](./DeathChecker/README.md) contains the client and local server for OCR-based death notifications to a Discord webhook. It has its own setup, requirements, configuration, and tests.
+
 ## Repository contents
 
 The task XML templates have been stripped of account names, account SIDs, local absolute paths, and export timestamps. Use the `.ahk` sources if you want to review or change the automation.
