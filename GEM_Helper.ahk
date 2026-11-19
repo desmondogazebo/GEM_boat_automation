@@ -201,8 +201,14 @@ AssignShip(shipSlot, destination := "") {
             GameSend("{WheelUp}")
         GameSleep(1000) ;this is to allow the game to finish scrolling before interacting with the destination
 
-        destinationBounds := WaitForGameTextBounds(destination)
-        prepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", destinationBounds)
+        if (destination = "Unguja") {
+            lupalaBounds := WaitForGameTextBounds("Lupala")
+            lupalaPrepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", lupalaBounds)
+            prepareBounds := WaitForRightOfGameTextBounds("Prepare for Trade", lupalaPrepareBounds)
+        } else {
+            destinationBounds := WaitForGameTextBounds(destination)
+            prepareBounds := WaitForNearbyGameTextBounds("Prepare for Trade", destinationBounds)
+        }
     }
 
     GameClickTextBounds(prepareBounds)
@@ -322,6 +328,42 @@ WaitForNearbyGameTextBounds(expectedText, anchorBounds, timeoutMs := 30000) {
 
         if (activeElapsed >= timeoutMs) {
             MsgBox("Expected " expectedText " on OCR but didn't see it.")
+            ExitApp()
+        }
+
+        GameSleep(500)
+        activeElapsed += 500
+    }
+}
+
+
+WaitForRightOfGameTextBounds(expectedText, anchorBounds, timeoutMs := 30000) {
+    activeElapsed := 0
+
+    loop {
+        boundsList := ReadGameOCR(expectedText, 1, true)
+        anchorCenterY := anchorBounds.Y + anchorBounds.Height / 2
+        rightBounds := ""
+        nearestDistance := ""
+
+        for bounds in boundsList {
+            boundsCenterY := bounds.Y + bounds.Height / 2
+            if (bounds.X <= anchorBounds.X + anchorBounds.Width
+                || Abs(boundsCenterY - anchorCenterY) > Max(bounds.Height, anchorBounds.Height))
+                continue
+
+            distance := bounds.X - (anchorBounds.X + anchorBounds.Width)
+            if (nearestDistance = "" || distance < nearestDistance) {
+                rightBounds := bounds
+                nearestDistance := distance
+            }
+        }
+
+        if IsObject(rightBounds)
+            return rightBounds
+
+        if (activeElapsed >= timeoutMs) {
+            MsgBox("Expected " expectedText " to the right of its neighboring trade button on OCR but didn't see it.")
             ExitApp()
         }
 
