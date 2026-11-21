@@ -19,7 +19,7 @@ This standalone module monitors the Granado Espada M game window, checks a confi
    .\StartServer.ps1
    ```
 
-   The server creates its virtual environment, installs its dependencies, and listens on `127.0.0.1:8000`.
+   The server installs its dependencies into the selected existing Python installation and listens on `127.0.0.1:8000`.
 3. In `DeathChecker\Client`, copy `config.example.json` to `config.json` and calibrate `deathScreenCrop` as `[left, top, width, height]` fractions of the game window. On first start, the client asks for a Discord ID if none is already saved or configured. It stores the ID in `%LOCALAPPDATA%\EchelonDeathMonitor\discord-id.txt` and reuses it on later starts. When the death screen does not show a victim name, this ID is used as the report's victim.
 4. With Granado Espada M running, start the client from PowerShell 7:
 
@@ -37,7 +37,7 @@ For local testing with a saved image, set `testScreenshotPath` to its absolute p
 
 The current `/auth/simple` flow automatically uses the saved Discord ID and stores the resulting API key, encrypted with Windows DPAPI, in a per-ID file under `%LOCALAPPDATA%\EchelonDeathMonitor`. It does not verify ownership of that Discord account; this is not Discord OAuth. The server binds to loopback and is intended for local testing only. Do not expose it to the internet or configure a remote client to use it.
 
-The server stores authorized IDs and hashed API keys in its local SQLite database. It does not persist death reports; it forwards report text and the screenshot to the configured Discord webhook and returns an error if delivery is unavailable. Keep `Server/.env` private. Local configuration, database, and virtual-environment files are excluded by this module's `.gitignore`.
+The server stores authorized IDs and hashed API keys in its local SQLite database. It does not persist death reports; it forwards report text and the screenshot to the configured Discord webhook and returns an error if delivery is unavailable. Keep `Server/.env` private. Local configuration and database files are excluded by this module's `.gitignore`.
 
 The death screen's `MM/DD HH:MM` time is interpreted in the server machine's local timezone and assigned the nearest matching year, then sent as a Discord full-date timestamp (`<t:...:F>`). Discord renders that timestamp in each viewer's local timezone.
 
@@ -45,9 +45,9 @@ After a successful webhook delivery, the client stores a hash of the current dea
 
 ## Tests
 
-From `DeathChecker\Server`, install development requirements in the server virtual environment and run:
+From `DeathChecker\Server`, install development requirements into the same Python installation and run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r .\requirements-dev.txt
-.\.venv\Scripts\python.exe -m pytest .\tests
+py -3 -m pip install -r .\requirements-dev.txt
+py -3 -m pytest .\tests
 ```
