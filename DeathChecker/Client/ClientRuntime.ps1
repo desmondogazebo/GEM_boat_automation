@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 if ($PSVersionTable.PSVersion.Major -lt 7) {
-    throw "PowerShell 7 or later is required. Start this script from pwsh."
+    throw "PowerShell 7 or later is required by the client runtime."
 }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($identity)

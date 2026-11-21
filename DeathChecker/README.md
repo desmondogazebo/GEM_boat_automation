@@ -19,15 +19,15 @@ This standalone module monitors the Granado Espada M game window, checks a confi
    .\StartServer.cmd
    ```
 
-   The batch launcher keeps its PowerShell window open for errors and runs the script with a process-scoped execution-policy bypass. The server installs its dependencies into the selected existing Python installation and listens on `127.0.0.1:8000`. Double-click `StartServer.cmd` to launch it from Explorer.
+   `StartServer.cmd` performs the bootstrap directly, installs dependencies into the selected existing Python installation, and listens on `127.0.0.1:8000`. Double-click it to launch; the window stays open after errors or when the server stops.
 3. In `DeathChecker\Client`, copy `config.example.json` to `config.json` and calibrate `deathScreenCrop` as `[left, top, width, height]` fractions of the game window. On first start, the client asks for a Discord ID if none is already saved or configured. It stores the ID in `%LOCALAPPDATA%\EchelonDeathMonitor\discord-id.txt` and reuses it on later starts. When the death screen does not show a victim name, this ID is used as the report's victim.
-4. With Granado Espada M running, start the client from PowerShell 7:
+4. With Granado Espada M running, start the client:
 
    ```powershell
-   .\Start.ps1
+   .\StartClient.cmd
    ```
 
-   The client requests administrator permission through Windows UAC so it can capture a game running elevated. Press `P` to pause/resume monitoring or `Q` to quit. The client removes its temporary screenshot after each check.
+   The command file launches the PowerShell client with a process-scoped execution-policy bypass and keeps its window open. The client requests administrator permission through Windows UAC so it can capture a game running elevated. Press `P` to pause/resume monitoring or `Q` to quit. The client removes its temporary screenshot after each check.
 
 The sample crop is unset and OCR labels/keywords may need tuning for the actual game UI. Verify capture and OCR against a real death screen before relying on notifications. The client only attempts a game-window capture and does not fall back to desktop capture.
 
