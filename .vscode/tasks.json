@@ -1,0 +1,50 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "DeathChecker local server",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-NoExit",
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"${workspaceFolder}\\DeathChecker\\Server\\StartServer.ps1"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "DeathChecker local client",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoExit",
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"${workspaceFolder}\\DeathChecker\\Client\\Start.ps1"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "DeathChecker client screenshot test",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoExit",
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"${workspaceFolder}\\DeathChecker\\Client\\Start.ps1"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
