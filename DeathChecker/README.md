@@ -16,10 +16,10 @@ This standalone module monitors the Granado Espada M game window, checks a confi
 
    ```powershell
    py -3 .\manage_users.py add YOUR_DISCORD_ID
-   .\StartServer.ps1
+   .\StartServer.cmd
    ```
 
-   The server installs its dependencies into the selected existing Python installation and listens on `127.0.0.1:8000`.
+   The batch launcher keeps its PowerShell window open for errors and runs the script with a process-scoped execution-policy bypass. The server installs its dependencies into the selected existing Python installation and listens on `127.0.0.1:8000`. Double-click `StartServer.cmd` to launch it from Explorer.
 3. In `DeathChecker\Client`, copy `config.example.json` to `config.json` and calibrate `deathScreenCrop` as `[left, top, width, height]` fractions of the game window. On first start, the client asks for a Discord ID if none is already saved or configured. It stores the ID in `%LOCALAPPDATA%\EchelonDeathMonitor\discord-id.txt` and reuses it on later starts. When the death screen does not show a victim name, this ID is used as the report's victim.
 4. With Granado Espada M running, start the client from PowerShell 7:
 
