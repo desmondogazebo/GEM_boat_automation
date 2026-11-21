@@ -2,6 +2,7 @@ Client/config.json
 Client/*.log
 Server/.env
 Server/.venv/
+Client/dist/
 Server/echelon.db
 Server/__pycache__/
 Server/**/__pycache__/

@@ -33,6 +33,12 @@ The sample crop is unset and OCR labels/keywords may need tuning for the actual 
 
 For local testing with a saved image, set `testScreenshotPath` to its absolute path. This bypasses game-window capture, but still exercises OCR, death-screen parsing, authentication, and report delivery to the configured local server. Clear it to return to live game capture.
 
+## Client executable
+
+The GitHub release includes a compressed self-extracting `DeathCheckerClient.exe` containing the PowerShell client and its modules. It extracts them under `%LOCALAPPDATA%\EchelonDeathMonitor\ClientApp`, creates `config.json` from the example on first launch, and then starts the client. Configure that generated file before launching again. The executable still requires PowerShell 7 or later and Tesseract OCR; neither runtime is bundled. The executable is a launcher, not code obfuscation.
+
+To build it locally from PowerShell 7, run `.\BuildClientExe.ps1` in `DeathChecker\Client`. The build needs the Windows .NET Framework C# compiler and writes `dist\DeathCheckerClient.exe`.
+
 ## Security and data handling
 
 The current `/auth/simple` flow automatically uses the saved Discord ID and stores the resulting API key, encrypted with Windows DPAPI, in a per-ID file under `%LOCALAPPDATA%\EchelonDeathMonitor`. It does not verify ownership of that Discord account; this is not Discord OAuth. The server binds to loopback and is intended for local testing only. Do not expose it to the internet or configure a remote client to use it.
