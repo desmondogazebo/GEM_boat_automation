@@ -1,5 +1,7 @@
 import hashlib
+import requests
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -7,11 +9,21 @@ from fastapi.testclient import TestClient
 
 from config import Settings
 from database import Database
-from main import create_app
+from main import _format_discord_timestamp, create_app
 
 
 DISCORD_ID = "123456789012345678"
 PNG = b"\x89PNG\r\n\x1a\nexample"
+
+
+def test_game_time_formats_as_discord_timestamp_using_nearest_year():
+    now = datetime(2026, 11, 21, 16, 7)
+    expected_time = datetime(2026, 11, 21, 15, 48)
+    expected_epoch = int(time.mktime(expected_time.timetuple()))
+
+    assert _format_discord_timestamp("11/21 15:48", now=now) == (
+        f"<t:{expected_epoch}:F>"
+    )
 
 
 def make_client(tmp_path: Path):
@@ -88,7 +100,7 @@ def test_heartbeat_refreshes_session_and_expired_key_is_rejected(tmp_path):
     assert expired.status_code == 401
 
 
-def test_report_accepts_valid_png_and_stores_data(tmp_path):
+def test_report_rejects_when_webhook_is_not_configured(tmp_path):
     client, database_path = make_client(tmp_path)
     api_key = get_authenticated_key(client)
 
@@ -99,8 +111,8 @@ def test_report_accepts_valid_png_and_stores_data(tmp_path):
         data={"victim": "TestVictim", "killer": "TestKiller", "death_time": "19:30"},
         files={"screenshot": ("screen.png", PNG, "image/png")},
     )
-    assert report.status_code == 200
-    assert report.json()["status"] == "submitted"
+    assert report.status_code == 503
+    assert report.json()["detail"] == "Discord webhook is not configured"
 
 
 def test_report_rejects_non_png_images(tmp_path):
@@ -212,10 +224,47 @@ def test_report_uses_configured_webhook(tmp_path, monkeypatch):
     response = client.post(
         "/deathreport",
         headers={"Authorization": f"Bearer {api_key}"},
-        data={"victim": "TestVictim", "killer": "TestKiller", "death_time": "19:30"},
+        data={
+            "victim": "TestVictim",
+            "killer": "TestKiller",
+            "death_time": "11/21 15:48",
+        },
         files={"screenshot": ("screen.png", PNG, "image/png")},
     )
 
     assert response.status_code == 200
     assert posted["url"] == webhook_url
     assert posted["files"]["file"][1] == PNG
+    assert "Time: <t:" in posted["data"]["content"]
+
+
+def test_report_returns_error_when_webhook_delivery_fails(tmp_path, monkeypatch):
+    database_path = tmp_path / "echelon.db"
+    Database(database_path)
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO authorised_users (discord_id) VALUES (?)", (DISCORD_ID,)
+        )
+
+    app = create_app(
+        Settings(
+            database_path=database_path,
+            discord_webhook_url="https://example.test/webhook",
+        )
+    )
+    client = TestClient(app)
+    api_key = get_authenticated_key(client)
+
+    def fail_post(*args, **kwargs):
+        raise requests.ConnectionError("simulated local webhook failure")
+
+    monkeypatch.setattr("main.requests.post", fail_post)
+    response = client.post(
+        "/deathreport",
+        headers={"Authorization": f"Bearer {api_key}"},
+        data={"victim": "TestVictim", "killer": "TestKiller", "death_time": "19:30"},
+        files={"screenshot": ("screen.png", PNG, "image/png")},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Discord webhook delivery failed"

@@ -1,7 +1,18 @@
 if (-not ("Echelon.WindowCapture" -as [type])) {
     Add-Type -AssemblyName System.Drawing
     $drawingAssembly = [System.Drawing.Bitmap].Assembly.Location
-    Add-Type -ReferencedAssemblies $drawingAssembly -TypeDefinition @"
+    $drawingAssemblies = @($drawingAssembly)
+    foreach ($assemblyName in @(
+        "System.Drawing.Primitives.dll",
+        "System.Private.Windows.GdiPlus.dll",
+        "System.Private.Windows.Core.dll"
+    )) {
+        $assemblyPath = Join-Path $PSHOME $assemblyName
+        if (Test-Path -LiteralPath $assemblyPath) {
+            $drawingAssemblies += $assemblyPath
+        }
+    }
+    Add-Type -ReferencedAssemblies $drawingAssemblies -TypeDefinition @"
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;

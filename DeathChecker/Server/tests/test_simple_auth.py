@@ -125,7 +125,7 @@ def test_deathreport_requires_valid_api_key(tmp_path):
     assert response.status_code == 401
 
 
-def test_deathreport_accepts_valid_data(tmp_path):
+def test_deathreport_requires_configured_webhook(tmp_path):
     client, _ = make_client(tmp_path)
 
     auth_response = client.post(
@@ -146,8 +146,8 @@ def test_deathreport_accepts_valid_data(tmp_path):
         headers={"Authorization": f"Bearer {api_key}"},
     )
 
-    assert report_response.status_code == 200
-    assert report_response.json()["status"] == "submitted"
+    assert report_response.status_code == 503
+    assert report_response.json()["detail"] == "Discord webhook is not configured"
 
 
 def test_rate_limiting_on_auth(tmp_path):

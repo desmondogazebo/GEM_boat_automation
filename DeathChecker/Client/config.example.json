@@ -4,6 +4,7 @@
   "gameProcessNames": [
     "GranadoEspadaM"
   ],
+  "testScreenshotPath": null,
   "deathScreenCrop": null,
   "monitorIntervalMinutes": 30,
   "heartbeatIntervalMinutes": 15,
@@ -12,7 +13,8 @@
   "deathKeywords": [
     "death",
     "dead",
-    "killed"
+    "killed",
+    "defeated by"
   ],
   "fieldLabels": {
     "victim": "Victim",

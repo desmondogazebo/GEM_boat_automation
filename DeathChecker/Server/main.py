@@ -1,6 +1,7 @@
 import json
 import ipaddress
 import logging
+import re
 import secrets
 import time
 from collections import defaultdict, deque
@@ -20,6 +21,28 @@ from database import Database
 logger = logging.getLogger("echelon")
 
 MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024
+
+
+def _format_discord_timestamp(value: str, *, now: datetime | None = None) -> str:
+    match = re.fullmatch(r"\s*(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2})\s*", value)
+    if not match:
+        return value
+
+    month, day, hour, minute = (int(part) for part in match.groups())
+    current = now or datetime.now()
+    current_epoch = time.mktime(current.timetuple())
+    candidates = []
+    for year in range(current.year - 2, current.year + 3):
+        try:
+            local_time = datetime(year, month, day, hour, minute)
+        except ValueError:
+            continue
+        timestamp = int(time.mktime(local_time.timetuple()))
+        candidates.append((abs(timestamp - current_epoch), timestamp))
+
+    if not candidates:
+        return value
+    return f"<t:{min(candidates)[1]}:F>"
 
 
 class SimpleAuth(BaseModel):
@@ -153,24 +176,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             discord_id,
         )
 
-        # Post to Discord webhook if configured
-        if settings.discord_webhook_url:
-            try:
-                webhook_data = {
-                    "content": f"**Death Report**\nVictim: {victim.strip()}\nKiller: {killer.strip()}\nTime: {death_time.strip()}",
-                }
-                files = {"file": ("death_screenshot.png", image, "image/png")}
-                response = requests.post(
-                    settings.discord_webhook_url,
-                    data=webhook_data,
-                    files=files,
-                    timeout=10,
-                )
-                response.raise_for_status()
-                logger.info("Webhook posted successfully: %s", response.status_code)
-            except Exception as e:
-                logger.error("Webhook post failed: %s", e)
-                # Don't fail the report if webhook fails; server still accepted it
+        if not settings.discord_webhook_url:
+            raise HTTPException(
+                status_code=503, detail="Discord webhook is not configured"
+            )
+        try:
+            discord_time = _format_discord_timestamp(death_time)
+            webhook_data = {
+                "content": f"**Death Report**\nVictim: {victim.strip()}\nKiller: {killer.strip()}\nTime: {discord_time}",
+            }
+            files = {"file": ("death_screenshot.png", image, "image/png")}
+            response = requests.post(
+                settings.discord_webhook_url,
+                data=webhook_data,
+                files=files,
+                timeout=10,
+            )
+            response.raise_for_status()
+            logger.info("Webhook posted successfully: %s", response.status_code)
+        except requests.RequestException as exc:
+            logger.error("Webhook post failed (%s)", type(exc).__name__)
+            raise HTTPException(
+                status_code=502, detail="Discord webhook delivery failed"
+            ) from exc
 
         return {"status": "submitted"}
 

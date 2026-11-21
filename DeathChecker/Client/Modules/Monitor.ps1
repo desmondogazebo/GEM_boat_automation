@@ -5,14 +5,14 @@ $version = "1.0.0"
 $serverUrl = ([string]$Config.serverUrl).TrimEnd("/")
 $monitorInterval = [TimeSpan]::FromMinutes([double]$Config.monitorIntervalMinutes)
 $heartbeatInterval = [TimeSpan]::FromMinutes([double]$Config.heartbeatIntervalMinutes)
-$apiKey = Get-StoredApiKey
+$apiKey = Get-StoredApiKey -DiscordId ([string]$Config.discordId)
 $discordId = "Not authenticated"
 $paused = $false
 $reportCount = 0
 $lastCheck = "Never"
 $lastHeartbeat = "Never"
 $gameStatus = "Unknown"
-$lastFingerprint = $null
+$lastFingerprint = Get-StoredDeathFingerprint
 $nextCheck = Get-Date
 $nextHeartbeat = Get-Date
 $heartbeatRetrySeconds = 30
@@ -32,7 +32,7 @@ function Invoke-ClientAuthentication {
     }
     $discordId = ([string]$Config.discordId).Trim()
     $result = Invoke-SimpleAuthentication -ServerUrl $serverUrl -DiscordId $discordId
-    Save-StoredApiKey -ApiKey $result.ApiKey
+    Save-StoredApiKey -DiscordId $discordId -ApiKey $result.ApiKey
     $script:apiKey = $result.ApiKey
     $script:discordId = $result.DiscordId
     Write-Status "Authentication succeeded with Discord ID $discordId."
@@ -68,7 +68,7 @@ function Invoke-Heartbeat {
         return
     }
     if ($result.StatusCode -eq 401) {
-        Remove-StoredApiKey
+        Remove-StoredApiKey -DiscordId ([string]$Config.discordId)
         $script:apiKey = $null
         $script:discordId = "Not authenticated"
         Write-Status "API key expired or revoked; signing in again."
@@ -83,7 +83,7 @@ function Invoke-Heartbeat {
                 return
             }
             if ($retry.StatusCode -eq 401) {
-                Remove-StoredApiKey
+                Remove-StoredApiKey -DiscordId ([string]$Config.discordId)
                 $script:apiKey = $null
                 $script:discordId = "Not authenticated"
             }
@@ -101,35 +101,60 @@ function Invoke-Heartbeat {
 function Invoke-GameCheck {
     $script:lastCheck = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $script:nextCheck = (Get-Date).Add($monitorInterval)
-    $process = Get-GameWindow -ProcessNames @($Config.gameProcessNames)
-    if (-not $process) {
-        $script:gameStatus = "Not running"
-        Write-Status "GE M game window not found."
-        return
+    $testScreenshotPath = [string]$Config.testScreenshotPath
+    if ($testScreenshotPath) {
+        if (-not (Test-Path -LiteralPath $testScreenshotPath -PathType Leaf)) {
+            throw "Test screenshot was not found: $testScreenshotPath"
+        }
+        $script:gameStatus = "Using test screenshot"
+    } else {
+        $process = Get-GameWindow -ProcessNames @($Config.gameProcessNames)
+        if (-not $process) {
+            $script:gameStatus = "Not running"
+            Write-Status "GE M game window not found."
+            return
+        }
+        $script:gameStatus = "Connected ($($process.ProcessName))"
     }
-    $script:gameStatus = "Connected ($($process.ProcessName))"
 
     $screenshotPath = $null
     try {
-        $screenshotPath = Save-GameWindowScreenshot `
-            -WindowHandle $process.MainWindowHandle `
-            -DeathScreenCrop @($Config.deathScreenCrop)
-        Write-Status "Captured the configured GE M death-screen crop; checking it with OCR."
+        if ($testScreenshotPath) {
+            $screenshotPath = Join-Path ([IO.Path]::GetTempPath()) (
+                "echelon-test-{0}.png" -f [Guid]::NewGuid().ToString("N")
+            )
+            Copy-Item -LiteralPath $testScreenshotPath -Destination $screenshotPath
+            Write-Status "Checking the supplied test screenshot with OCR."
+        } else {
+            $screenshotPath = Save-GameWindowScreenshot `
+                -WindowHandle $process.MainWindowHandle `
+                -DeathScreenCrop @($Config.deathScreenCrop)
+            Write-Status "Captured the configured GE M death-screen crop; checking it with OCR."
+        }
+
         $text = Get-GameScreenshotText `
             -ScreenshotPath $screenshotPath `
             -Executable ([string]$Config.ocrExecutable) `
             -Language ([string]$Config.ocrLanguage)
         if (-not (Test-DeathScreen -OcrText $text -Keywords @($Config.deathKeywords))) {
+            if ($lastFingerprint) {
+                Clear-DeathFingerprint
+                $script:lastFingerprint = $null
+                Write-Status "Death screen cleared; ready to report the next death."
+            }
             Write-Status "No configured death-screen marker detected."
             return
         }
-        $report = ConvertFrom-DeathScreenText -Text $text -FieldLabels $Config.fieldLabels
+        $report = ConvertFrom-DeathScreenText `
+            -Text $text `
+            -FieldLabels $Config.fieldLabels `
+            -DiscordId ([string]$Config.discordId)
         if (-not $report) {
             Write-Status "Death screen detected, but OCR fields were incomplete; no report sent."
             return
         }
 
-        $fingerprint = "$($report.Victim)|$($report.Killer)|$($report.DeathTime)"
+        $fingerprint = Get-DeathFingerprint -Report $report
         if ($fingerprint -eq $lastFingerprint) {
             Write-Status "This death report was already submitted; skipping duplicate."
             return
@@ -141,6 +166,7 @@ function Invoke-GameCheck {
             -Report $report `
             -ScreenshotPath $screenshotPath
         if ($statusCode -eq 200) {
+            Save-DeathFingerprint -Fingerprint $fingerprint
             $script:reportCount++
             $script:lastFingerprint = $fingerprint
             Write-Status "Death report and screenshot uploaded."
@@ -151,7 +177,7 @@ function Invoke-GameCheck {
             Write-Status "Death report delivery failed (HTTP $statusCode)."
         }
     } catch {
-        Write-Status "Game check failed; no unverified report was sent: $($_.Exception.Message)"
+        Write-Status "Game check failed: $($_.Exception.Message)"
     } finally {
         if ($screenshotPath -and (Test-Path -LiteralPath $screenshotPath)) {
             Remove-Item -LiteralPath $screenshotPath -Force
