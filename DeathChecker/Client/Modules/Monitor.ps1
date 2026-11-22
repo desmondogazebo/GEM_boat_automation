@@ -1,7 +1,7 @@
 param([Parameter(Mandatory)]$Config)
 
 $ErrorActionPreference = "Stop"
-$version = "1.0.0"
+$version = "1.0.2"
 $serverUrl = ([string]$Config.serverUrl).TrimEnd("/")
 $monitorInterval = [TimeSpan]::FromMinutes([double]$Config.monitorIntervalMinutes)
 $heartbeatInterval = [TimeSpan]::FromMinutes([double]$Config.heartbeatIntervalMinutes)
@@ -16,14 +16,29 @@ $lastFingerprint = Get-StoredDeathFingerprint
 $nextCheck = Get-Date
 $nextHeartbeat = Get-Date
 $heartbeatRetrySeconds = 30
+$recentLogs = [Collections.Generic.List[string]]::new()
+$maxLogLines = 8
 
 function Write-Status {
     param([string]$Message)
-    Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+
+    $recentLogs.Add("[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message")
+    if ($recentLogs.Count -gt $maxLogLines) {
+        $recentLogs.RemoveAt(0)
+    }
+
+    Clear-Host
+    Write-Host "Echelon Death Monitor v$version"
+    Write-Host "P: pause/resume monitoring | Q: quit"
     Write-Host "Game: $gameStatus | Monitoring: $(if ($paused) { 'Paused' } else { 'Active' })"
     Write-Host "Last check: $lastCheck | Next check: $nextCheck"
     Write-Host "Last heartbeat: $lastHeartbeat | Next heartbeat: $nextHeartbeat"
     Write-Host "Discord ID: $discordId | Reports submitted: $reportCount"
+    Write-Host ""
+    Write-Host "Recent activity (latest $maxLogLines):"
+    foreach ($line in $recentLogs) {
+        Write-Host $line
+    }
 }
 
 function Invoke-ClientAuthentication {
@@ -185,8 +200,6 @@ function Invoke-GameCheck {
     }
 }
 
-Write-Host "Echelon Death Monitor v$version"
-Write-Host "P: pause/resume monitoring | Q: quit"
 Write-Status "Client started."
 while ($true) {
     if ([Console]::KeyAvailable) {
