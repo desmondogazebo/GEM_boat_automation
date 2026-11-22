@@ -34,10 +34,10 @@ if exist "%ProgramFiles(x86)%\cloudflared\cloudflared.exe" set "CLOUDFLARED=%Pro
 if not defined CLOUDFLARED goto missing_cloudflared
 
 :start_tunnel
-tasklist /FI "IMAGENAME eq cloudflared.exe" | find /I "cloudflared.exe" >nul
-if not errorlevel 1 goto run_server
+netstat -ano -p tcp | findstr /C:"127.0.0.1:8000" | findstr /C:"LISTENING" >nul
+if not errorlevel 1 goto already_running
 echo Starting Cloudflare Tunnel for https://deathcheck.desmond-zheng.com
-start "DeathChecker Cloudflare Tunnel" "%CLOUDFLARED%" tunnel --config "%USERPROFILE%\.cloudflared\config.yml" run deathchecker
+start /b "" "%CLOUDFLARED%" tunnel --config "%USERPROFILE%\.cloudflared\config.yml" run deathchecker
 goto run_server
 
 :local_only
