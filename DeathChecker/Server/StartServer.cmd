@@ -25,6 +25,23 @@ if errorlevel 1 goto unsupported_python
 if errorlevel 1 goto dependency_error
 
 echo Starting Echelon Death Monitor at http://127.0.0.1:8000
+if not exist "%USERPROFILE%\.cloudflared\config.yml" goto local_only
+set "CLOUDFLARED="
+where cloudflared.exe >nul 2>nul
+if not errorlevel 1 set "CLOUDFLARED=cloudflared.exe"
+if defined CLOUDFLARED goto start_tunnel
+if exist "%ProgramFiles(x86)%\cloudflared\cloudflared.exe" set "CLOUDFLARED=%ProgramFiles(x86)%\cloudflared\cloudflared.exe"
+if not defined CLOUDFLARED goto missing_cloudflared
+
+:start_tunnel
+echo Starting Cloudflare Tunnel for https://deathcheck.desmond-zheng.com
+start "DeathChecker Cloudflare Tunnel" "%CLOUDFLARED%" tunnel --config "%USERPROFILE%\.cloudflared\config.yml" run deathchecker
+goto run_server
+
+:local_only
+echo No Cloudflare Tunnel configuration found; the API will be available only locally.
+
+:run_server
 echo Keep this window open. Press Ctrl+C to stop the server.
 %PYTHON% -m uvicorn "main:create_app" --factory --host "127.0.0.1" --port 8000
 if errorlevel 1 goto server_error
@@ -41,6 +58,10 @@ goto failed
 
 :dependency_error
 echo Dependency installation failed.
+goto failed
+
+:missing_cloudflared
+echo Cloudflare Tunnel is configured but cloudflared.exe was not found.
 goto failed
 
 :server_error
