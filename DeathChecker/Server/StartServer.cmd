@@ -34,6 +34,8 @@ if exist "%ProgramFiles(x86)%\cloudflared\cloudflared.exe" set "CLOUDFLARED=%Pro
 if not defined CLOUDFLARED goto missing_cloudflared
 
 :start_tunnel
+tasklist /FI "IMAGENAME eq cloudflared.exe" | find /I "cloudflared.exe" >nul
+if not errorlevel 1 goto run_server
 echo Starting Cloudflare Tunnel for https://deathcheck.desmond-zheng.com
 start "DeathChecker Cloudflare Tunnel" "%CLOUDFLARED%" tunnel --config "%USERPROFILE%\.cloudflared\config.yml" run deathchecker
 goto run_server
@@ -42,10 +44,17 @@ goto run_server
 echo No Cloudflare Tunnel configuration found; the API will be available only locally.
 
 :run_server
+netstat -ano -p tcp | findstr /C:"127.0.0.1:8000" | findstr /C:"LISTENING" >nul
+if not errorlevel 1 goto already_running
 echo Keep this window open. Press Ctrl+C to stop the server.
 %PYTHON% -m uvicorn "main:create_app" --factory --host "127.0.0.1" --port 8000
 if errorlevel 1 goto server_error
 echo Server stopped.
+goto finish
+
+:already_running
+echo DeathChecker API is already listening on 127.0.0.1:8000. Reusing the existing server.
+echo Keep its original server window open.
 goto finish
 
 :missing_python
