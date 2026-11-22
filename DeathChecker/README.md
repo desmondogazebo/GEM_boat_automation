@@ -1,6 +1,6 @@
 # GEM Death Checker
 
-This standalone module monitors the Granado Espada M game window, checks a configured crop with Tesseract OCR, and sends a detected death report and screenshot to a Discord webhook through a local FastAPI server.
+This standalone module monitors the Granado Espada M game window, checks a configured crop with Tesseract OCR, and sends a detected death report and screenshot to a FastAPI server that forwards it to a Discord webhook.
 
 ## Requirements
 
@@ -20,7 +20,7 @@ This standalone module monitors the Granado Espada M game window, checks a confi
    ```
 
    `StartServer.cmd` performs the bootstrap directly, installs dependencies into the selected existing Python installation, and listens on `127.0.0.1:8000`. Double-click it to launch; the window stays open after errors or when the server stops.
-3. In `DeathChecker\Client`, copy `config.example.json` to `config.json` and calibrate `deathScreenCrop` as `[left, top, width, height]` fractions of the game window. On first start, the client asks for a Discord ID if none is already saved or configured. It stores the ID in `%LOCALAPPDATA%\EchelonDeathMonitor\discord-id.txt` and reuses it on later starts. When the death screen does not show a victim name, this ID is used as the report's victim.
+3. In `DeathChecker\Client`, copy `config.example.json` to `config.json` and calibrate `deathScreenCrop` as `[left, top, width, height]` fractions of the game window. The default server URL is `https://deathcheck.desmond-zheng.com`; for local-only testing with the bundled server, use `http://127.0.0.1:8000`. On first start, the client asks for a Discord ID if none is already saved or configured. It stores the ID in `%LOCALAPPDATA%\EchelonDeathMonitor\discord-id.txt` and reuses it on later starts. When the death screen does not show a victim name, this ID is used as the report's victim.
 4. With Granado Espada M running, start the client:
 
    ```powershell
@@ -41,7 +41,7 @@ To build it locally from PowerShell 7, run `.\BuildClientExe.ps1` in `DeathCheck
 
 ## Security and data handling
 
-The current `/auth/simple` flow automatically uses the saved Discord ID and stores the resulting API key, encrypted with Windows DPAPI, in a per-ID file under `%LOCALAPPDATA%\EchelonDeathMonitor`. It does not verify ownership of that Discord account; this is not Discord OAuth. The server binds to loopback and is intended for local testing only. Do not expose it to the internet or configure a remote client to use it.
+The current `/auth/simple` flow automatically uses the saved Discord ID and stores the resulting API key, encrypted with Windows DPAPI, in a per-ID file under `%LOCALAPPDATA%\EchelonDeathMonitor`. It does not verify ownership of that Discord account; anyone who knows an authorized ID can request an API key. The server launcher binds to loopback and is intended for local testing only. The default client URL uses `deathcheck.desmond-zheng.com`, but DNS alone does not make the server reachable; a correctly configured HTTPS reverse proxy or tunnel on the server device is required before remote use.
 
 The server stores authorized IDs and hashed API keys in its local SQLite database. It does not persist death reports; it forwards report text and the screenshot to the configured Discord webhook and returns an error if delivery is unavailable. Keep `Server/.env` private. Local configuration and database files are excluded by this module's `.gitignore`.
 
