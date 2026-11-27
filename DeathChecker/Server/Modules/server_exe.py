@@ -50,6 +50,7 @@ class ClientDashboard:
 
         return Group(
             table,
+            Text("Press Ctrl+C once to stop the API and tunnel.", style="dim"),
             Text(
                 "Only current in-memory heartbeat clients are shown; "
                 "rows expire after 20 minutes and clear on exit.",
@@ -253,7 +254,6 @@ def _run_server() -> int:
             f"[{CloudflareTunnel._timestamp()}] "
             f"Starting Echelon Death Monitor API on http://{HOST}:{PORT}"
         )
-        console.print("Press Ctrl+C once to stop the API and tunnel.")
 
         tracker = ClientActivityTracker()
         app = create_app(settings, client_activity=tracker)
