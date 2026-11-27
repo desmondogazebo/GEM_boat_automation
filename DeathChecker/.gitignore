@@ -1,0 +1,11 @@
+Client/config.json
+Client/*.log
+Server/.env
+Server/.venv/
+Server/EchelonDeathMonitorServer.exe
+Client/dist/
+Server/SGMY.db
+Server/__pycache__/
+Server/**/__pycache__/
+Server/**/*.py[cod]
+Server/CloudflareWorker/

@@ -26,7 +26,7 @@ jobs:
           }
           $version = $Matches.version
 
-          $notes = 'Download GEM_Helper.exe and GameOCR.ps1 from the release assets. Keep GameOCR.ps1 beside the executable. AutoHotkey is not required to run the executables.'
+          $notes = 'Download DailyShipHelper.exe from the release assets. The launcher requests administrator permission and creates an isolated .venv beside the executable on first use; Python 3.11 or later is required.'
           $previousTag = git describe --tags --abbrev=0 "$tag^" 2>$null
           $range = if ($LASTEXITCODE -eq 0 -and $previousTag) { "$previousTag..$tag" } else { $tag }
           $commits = git log $range --no-merges --format='- %s (%h)'
@@ -35,58 +35,15 @@ jobs:
           Set-Content -Path "$env:RUNNER_TEMP\release-notes.md" -Value $notes -Encoding utf8
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Install AutoHotkey v2
+      - name: Build Daily Ship Helper
         shell: pwsh
         run: |
-          winget install --id AutoHotkey.AutoHotkey --exact --silent --accept-package-agreements --accept-source-agreements
-          if ($LASTEXITCODE -ne 0) {
-            throw "AutoHotkey v2 installation failed (exit code $LASTEXITCODE)"
-          }
-
-      - name: Install Ahk2Exe
-        shell: pwsh
-        run: |
-          $version = "1.1.37.02a2"
-          $archiveName = "Ahk2Exe$version.zip"
-          $archive = Join-Path $env:RUNNER_TEMP $archiveName
-          $url = "https://github.com/AutoHotkey/Ahk2Exe/releases/download/Ahk2Exe$version/$archiveName"
-          $expectedHash = "c29b8c3a5124850d79fc9e66e2ca79677c377d7f31631ad3022ba159c5d9e3be"
-
-          Invoke-WebRequest -Uri $url -OutFile $archive
-          $actualHash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualHash -ne $expectedHash) {
-            throw "Ahk2Exe archive SHA-256 mismatch: $actualHash"
-          }
-
-          $compilerDirectory = Join-Path $env:RUNNER_TEMP "Ahk2Exe"
-          Expand-Archive -Path $archive -DestinationPath $compilerDirectory
-
-      - name: Compile scripts
-        shell: pwsh
-        run: |
-          $compiler = Get-ChildItem "$env:RUNNER_TEMP\Ahk2Exe" -Filter Ahk2Exe.exe -Recurse |
-            Select-Object -First 1
-          $base = Get-ChildItem @("$env:ProgramFiles\AutoHotkey", "$env:LOCALAPPDATA\Programs\AutoHotkey") -Filter AutoHotkey64.exe -Recurse -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-
-          if (-not $compiler) {
-            throw "Could not find Ahk2Exe.exe in $env:RUNNER_TEMP\Ahk2Exe"
-          }
-          if (-not $base) {
-            throw "Could not find AutoHotkey64.exe in the AutoHotkey installation"
-          }
-
+          .\DailyShipHelper\BuildDailyShipHelper.ps1
           New-Item -ItemType Directory -Path dist -Force | Out-Null
-          foreach ($script in @("GEM_Helper")) {
-            # Ahk2Exe is a GUI-subsystem program, so it must be waited on explicitly.
-            $arguments = @("/in", "`"$PWD\$script.ahk`"", "/out", "`"$PWD\dist\$script.exe`"", "/base", "`"$($base.FullName)`"")
-            $process = Start-Process -FilePath $compiler.FullName -ArgumentList $arguments -Wait -PassThru -NoNewWindow
-            if ($process.ExitCode -ne 0 -or -not (Test-Path "dist\$script.exe")) {
-              throw "Ahk2Exe failed to compile $script.ahk (exit code $($process.ExitCode))"
-            }
+          Copy-Item .\DailyShipHelper\DailyShipHelper.exe .\dist\DailyShipHelper.exe
+          if (-not (Test-Path .\dist\DailyShipHelper.exe)) {
+            throw "DailyShipHelper.exe was not created."
           }
-
-          Copy-Item GameOCR.ps1 dist\
 
       - name: Publish release
         env:
@@ -95,7 +52,7 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $notes = "$env:RUNNER_TEMP\release-notes.md"
-          $assets = @("dist/GEM_Helper.exe", "dist/GameOCR.ps1")
+          $assets = @("dist/DailyShipHelper.exe")
           $prerelease = if ($env:VERSION.Contains("-")) { @("--prerelease") } else { @() }
 
           gh release view $tag *> $null
