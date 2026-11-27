@@ -4,7 +4,7 @@
 		{
 			"label": "DeathChecker local server",
 			"type": "shell",
-			"command": "${workspaceFolder}\\DeathChecker\\Server\\StartServer.cmd",
+			"command": "${workspaceFolder}\\DeathChecker\\Server\\EchelonDeathMonitorServer.exe",
 			"args": [],
 			"isBackground": true,
 			"problemMatcher": []
@@ -12,15 +12,7 @@
 		{
 			"label": "DeathChecker local client",
 			"type": "shell",
-			"command": "${workspaceFolder}\\DeathChecker\\Client\\StartClient.cmd",
-			"args": [],
-			"isBackground": true,
-			"problemMatcher": []
-		},
-		{
-			"label": "DeathChecker client screenshot test",
-			"type": "shell",
-			"command": "${workspaceFolder}\\DeathChecker\\Client\\StartClient.cmd",
+			"command": "${workspaceFolder}\\DeathChecker\\Client\\dist\\DeathCheckerClient.exe",
 			"args": [],
 			"isBackground": true,
 			"problemMatcher": []

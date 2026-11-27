@@ -3,10 +3,16 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
+using System.Text;
 
 internal static class ClientExeLauncher
 {
     private const string BundleResourceName = "DeathCheckerClient.Bundle.zip";
+    private const string DefaultConfigJson =
+        "{\r\n" +
+        "  \"monitorIntervalMinutes\": 30,\r\n" +
+        "  \"discordId\": \"\"\r\n" +
+        "}\r\n";
 
     private static int Main()
     {
@@ -18,18 +24,23 @@ internal static class ClientExeLauncher
             if (String.IsNullOrEmpty(localAppData))
                 throw new InvalidOperationException("The local application data folder is unavailable.");
 
+            string executableDirectory = Path.GetDirectoryName(
+                Assembly.GetExecutingAssembly().Location);
+            if (String.IsNullOrEmpty(executableDirectory))
+                throw new InvalidOperationException("The executable folder is unavailable.");
+
             string clientDirectory = Path.Combine(localAppData, "EchelonDeathMonitor", "ClientApp");
             Directory.CreateDirectory(clientDirectory);
             ExtractBundle(clientDirectory);
 
-            string configPath = Path.Combine(clientDirectory, "config.json");
+            string configPath = Path.Combine(executableDirectory, "config.json");
+            RemoveLegacyConfiguration(clientDirectory, localAppData, configPath);
             if (!File.Exists(configPath))
             {
-                string examplePath = Path.Combine(clientDirectory, "config.example.json");
-                File.Copy(examplePath, configPath);
-                Console.WriteLine("Created config.json at:");
+                File.WriteAllText(configPath, DefaultConfigJson, new UTF8Encoding(false));
+                Console.WriteLine("Created config.json beside the executable:");
                 Console.WriteLine(configPath);
-                Console.WriteLine("Configure it, then launch this executable again.");
+                Console.WriteLine("Set discordId and monitorIntervalMinutes, then launch this executable again.");
                 WaitForKey();
                 return 0;
             }
@@ -46,7 +57,7 @@ internal static class ClientExeLauncher
             ProcessStartInfo startInfo = new ProcessStartInfo();
             startInfo.FileName = pwshPath;
             startInfo.Arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File " +
-                QuoteArgument(runtimePath);
+                QuoteArgument(runtimePath) + " -ConfigPath " + QuoteArgument(configPath);
             startInfo.WorkingDirectory = clientDirectory;
             startInfo.UseShellExecute = false;
 
@@ -61,6 +72,29 @@ internal static class ClientExeLauncher
             Console.Error.WriteLine("DeathChecker could not start: " + exception.Message);
             WaitForKey();
             return 1;
+        }
+    }
+
+    private static void RemoveLegacyConfiguration(
+        string clientDirectory,
+        string localAppData,
+        string currentConfigPath)
+    {
+        string[] legacyFiles = new string[] {
+            Path.Combine(clientDirectory, "config.json"),
+            Path.Combine(clientDirectory, "config.example.json"),
+            Path.Combine(localAppData, "EchelonDeathMonitor", "discord-id.txt")
+        };
+        foreach (string path in legacyFiles)
+        {
+            if (String.Equals(
+                Path.GetFullPath(path),
+                Path.GetFullPath(currentConfigPath),
+                StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (File.Exists(path))
+                File.Delete(path);
         }
     }
 

@@ -1,12 +1,12 @@
 param([Parameter(Mandatory)]$Config)
 
 $ErrorActionPreference = "Stop"
-$version = "1.0.2"
+$version = "1.0.11"
 $serverUrl = ([string]$Config.serverUrl).TrimEnd("/")
 $monitorInterval = [TimeSpan]::FromMinutes([double]$Config.monitorIntervalMinutes)
 $heartbeatInterval = [TimeSpan]::FromMinutes([double]$Config.heartbeatIntervalMinutes)
 $apiKey = Get-StoredApiKey -DiscordId ([string]$Config.discordId)
-$discordId = "Not authenticated"
+$discordId = [string]$Config.discordId
 $paused = $false
 $reportCount = 0
 $lastCheck = "Never"
@@ -41,6 +41,22 @@ function Write-Status {
     }
 }
 
+function Update-GameWindowSize {
+    $process = Get-GameWindow -ProcessNames @($Config.gameProcessNames)
+    if (-not $process) {
+        $script:gameStatus = "Not running"
+        return
+    }
+
+    try {
+        $size = Get-GameWindowSize -WindowHandle $process.MainWindowHandle
+        $script:gameStatus = "Connected ($($process.ProcessName), $($size.Width)x$($size.Height))"
+    } catch {
+        $script:gameStatus = "Connected ($($process.ProcessName); size unavailable)"
+        Write-Status "Could not refresh game window size: $($_.Exception.Message)"
+    }
+}
+
 function Invoke-ClientAuthentication {
     if (-not $Config.discordId -or -not ([string]$Config.discordId).Trim()) {
         throw "discordId is not configured in config.json"
@@ -54,6 +70,8 @@ function Invoke-ClientAuthentication {
 }
 
 function Invoke-Heartbeat {
+    Update-GameWindowSize
+
     if (-not $apiKey) {
         $probe = Send-DeathMonitorHeartbeat `
             -ServerUrl $serverUrl `
@@ -116,58 +134,42 @@ function Invoke-Heartbeat {
 function Invoke-GameCheck {
     $script:lastCheck = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $script:nextCheck = (Get-Date).Add($monitorInterval)
-    $testScreenshotPath = [string]$Config.testScreenshotPath
-    if ($testScreenshotPath) {
-        if (-not (Test-Path -LiteralPath $testScreenshotPath -PathType Leaf)) {
-            throw "Test screenshot was not found: $testScreenshotPath"
-        }
-        $script:gameStatus = "Using test screenshot"
-    } else {
-        $process = Get-GameWindow -ProcessNames @($Config.gameProcessNames)
-        if (-not $process) {
-            $script:gameStatus = "Not running"
-            Write-Status "GE M game window not found."
-            return
-        }
-        $script:gameStatus = "Connected ($($process.ProcessName))"
+    $process = Get-GameWindow -ProcessNames @($Config.gameProcessNames)
+    if (-not $process) {
+        $script:gameStatus = "Not running"
+        Write-Status "GE M game window not found."
+        return
+    }
+    $script:gameStatus = "Connected ($($process.ProcessName))"
+    try {
+        $size = Get-GameWindowSize -WindowHandle $process.MainWindowHandle
+        $script:gameStatus = "Connected ($($process.ProcessName), $($size.Width)x$($size.Height))"
+    } catch {
+        $script:gameStatus = "Connected ($($process.ProcessName); size unavailable)"
+        Write-Status "Could not read game window size: $($_.Exception.Message)"
     }
 
     $screenshotPath = $null
     try {
-        if ($testScreenshotPath) {
-            $screenshotPath = Join-Path ([IO.Path]::GetTempPath()) (
-                "echelon-test-{0}.png" -f [Guid]::NewGuid().ToString("N")
-            )
-            Copy-Item -LiteralPath $testScreenshotPath -Destination $screenshotPath
-            Write-Status "Checking the supplied test screenshot with OCR."
-        } else {
-            $screenshotPath = Save-GameWindowScreenshot `
-                -WindowHandle $process.MainWindowHandle `
-                -DeathScreenCrop @($Config.deathScreenCrop)
-            Write-Status "Captured the configured GE M death-screen crop; checking it with OCR."
-        }
+        $screenshotPath = Save-GameWindowScreenshot `
+            -WindowHandle $process.MainWindowHandle `
+            -DeathScreenCrop $Config.deathScreenCrop
+        Write-Status "Captured the current GE M game window; checking it with OCR."
 
-        $text = Get-GameScreenshotText `
-            -ScreenshotPath $screenshotPath `
-            -Executable ([string]$Config.ocrExecutable) `
-            -Language ([string]$Config.ocrLanguage)
+        $text = Get-GameScreenshotText -ScreenshotPath $screenshotPath
         if (-not (Test-DeathScreen -OcrText $text -Keywords @($Config.deathKeywords))) {
             if ($lastFingerprint) {
                 Clear-DeathFingerprint
                 $script:lastFingerprint = $null
                 Write-Status "Death screen cleared; ready to report the next death."
             }
-            Write-Status "No configured death-screen marker detected."
+            Write-Status "No death-screen marker detected."
             return
         }
         $report = ConvertFrom-DeathScreenText `
             -Text $text `
             -FieldLabels $Config.fieldLabels `
             -DiscordId ([string]$Config.discordId)
-        if (-not $report) {
-            Write-Status "Death screen detected, but OCR fields were incomplete; no report sent."
-            return
-        }
 
         $fingerprint = Get-DeathFingerprint -Report $report
         if ($fingerprint -eq $lastFingerprint) {
@@ -175,11 +177,12 @@ function Invoke-GameCheck {
             return
         }
         Write-Status "Confirmed death detected; uploading screenshot and report."
-        $statusCode = Send-DeathReport `
+        $reportResponse = Send-DeathReport `
             -ServerUrl $serverUrl `
             -ApiKey $apiKey `
             -Report $report `
             -ScreenshotPath $screenshotPath
+        $statusCode = $reportResponse.StatusCode
         if ($statusCode -eq 200) {
             Save-DeathFingerprint -Fingerprint $fingerprint
             $script:reportCount++
@@ -189,7 +192,15 @@ function Invoke-GameCheck {
             Write-Status "Report rejected because the API key expired; reauthentication is due."
             $script:nextHeartbeat = Get-Date
         } else {
-            Write-Status "Death report delivery failed (HTTP $statusCode)."
+            $errorDetail = ([string]$reportResponse.Error -replace '\s+', ' ').Trim()
+            if ($errorDetail.Length -gt 240) {
+                $errorDetail = $errorDetail.Substring(0, 240) + "..."
+            }
+            if ($errorDetail) {
+                Write-Status "Death report delivery failed (HTTP $statusCode): $errorDetail"
+            } else {
+                Write-Status "Death report delivery failed (HTTP $statusCode)."
+            }
         }
     } catch {
         Write-Status "Game check failed: $($_.Exception.Message)"

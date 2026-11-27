@@ -42,6 +42,16 @@ namespace Echelon {
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
 
+        public static int[] GetWindowSize(IntPtr hWnd) {
+            RECT rect;
+            if (hWnd == IntPtr.Zero || !GetWindowRect(hWnd, out rect))
+                throw new InvalidOperationException("The GE M window is unavailable.");
+            int width = rect.Right - rect.Left, height = rect.Bottom - rect.Top;
+            if (width <= 0 || height <= 0)
+                throw new InvalidOperationException("The GE M window has no capturable area.");
+            return new int[] { width, height };
+        }
+
         public static void Capture(IntPtr hWnd, string path,
                                    double left, double top, double cropWidth, double cropHeight) {
             RECT rect;
@@ -63,7 +73,10 @@ namespace Echelon {
                 previous = SelectObject(memoryDC, bitmap);
                 if (previous == IntPtr.Zero)
                     throw new InvalidOperationException("Could not prepare the GE M capture surface.");
-                if (!PrintWindow(hWnd, memoryDC, 2))
+                bool captured = PrintWindow(hWnd, memoryDC, 2);
+                if (!captured)
+                    captured = PrintWindow(hWnd, memoryDC, 0);
+                if (!captured)
                     throw new InvalidOperationException(
                         "Windows could not capture the GE M window. Try borderless windowed mode.");
                 using (Bitmap image = Bitmap.FromHbitmap(bitmap)) {
@@ -92,15 +105,17 @@ namespace Echelon {
 function Save-GameWindowScreenshot {
     param(
         [Parameter(Mandatory)][IntPtr]$WindowHandle,
-        [Parameter(Mandatory)][double[]]$DeathScreenCrop
+        [double[]]$DeathScreenCrop
     )
 
-    if ($DeathScreenCrop.Count -ne 4 -or
+    if (-not $DeathScreenCrop -or $DeathScreenCrop.Count -eq 0) {
+        $DeathScreenCrop = @(0.0, 0.0, 1.0, 1.0)
+    } elseif ($DeathScreenCrop.Count -ne 4 -or
         $DeathScreenCrop[0] -lt 0 -or $DeathScreenCrop[1] -lt 0 -or
         $DeathScreenCrop[2] -le 0 -or $DeathScreenCrop[3] -le 0 -or
         $DeathScreenCrop[0] + $DeathScreenCrop[2] -gt 1 -or
         $DeathScreenCrop[1] + $DeathScreenCrop[3] -gt 1) {
-        throw "Set deathScreenCrop to [left, top, width, height] normalized to the GE M window after calibrating against a real death screen."
+        throw "deathScreenCrop must be [left, top, width, height] normalized to the GE M window."
     }
 
     $path = Join-Path ([IO.Path]::GetTempPath()) (
@@ -121,4 +136,14 @@ function Save-GameWindowScreenshot {
     }
 }
 
-Export-ModuleMember -Function Save-GameWindowScreenshot
+function Get-GameWindowSize {
+    param([Parameter(Mandatory)][IntPtr]$WindowHandle)
+
+    $size = [Echelon.WindowCapture]::GetWindowSize($WindowHandle)
+    return [pscustomobject]@{
+        Width = $size[0]
+        Height = $size[1]
+    }
+}
+
+Export-ModuleMember -Function Save-GameWindowScreenshot, Get-GameWindowSize

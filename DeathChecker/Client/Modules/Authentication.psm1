@@ -14,22 +14,6 @@ function Assert-DiscordId {
     }
 }
 
-function Get-StoredDiscordId {
-    $path = Join-Path (Get-ClientDataDirectory) "discord-id.txt"
-    if (-not (Test-Path -LiteralPath $path)) {
-        return $null
-    }
-    return (Get-Content -LiteralPath $path -Raw).Trim()
-}
-
-function Save-StoredDiscordId {
-    param([Parameter(Mandatory)][string]$DiscordId)
-
-    Assert-DiscordId -DiscordId $DiscordId
-    $path = Join-Path (Get-ClientDataDirectory) "discord-id.txt"
-    Set-Content -LiteralPath $path -Value $DiscordId -NoNewline -Encoding ASCII
-}
-
 function Get-KeyFilePath {
     param([Parameter(Mandatory)][string]$DiscordId)
 
@@ -92,24 +76,55 @@ function Invoke-SimpleAuthentication {
     param([Parameter(Mandatory)][string]$ServerUrl, [Parameter(Mandatory)][string]$DiscordId)
 
     try {
-        $response = Invoke-RestMethod `
+        $response = Invoke-WebRequest `
             -Uri "$($ServerUrl.TrimEnd('/'))/auth/simple" `
             -Method Post `
             -ContentType "application/json" `
             -Body (@{ discord_id = $DiscordId } | ConvertTo-Json) `
-            -TimeoutSec 15
-
-        if (-not $response.api_key -or $response.discord_id -ne $DiscordId) {
-            throw "The server returned an invalid authentication result."
-        }
-
-        return @{
-            ApiKey = $response.api_key
-            DiscordId = $response.discord_id
-        }
+            -TimeoutSec 15 `
+            -SkipHttpErrorCheck
     } catch {
-        throw "Authentication failed: $_"
+        throw "Authentication request failed: $($_.Exception.Message)"
+    }
+
+    $statusCode = [int]$response.StatusCode
+    $body = $null
+    if ($response.Content) {
+        try {
+            $body = ConvertFrom-Json -InputObject $response.Content -ErrorAction Stop
+        } catch {
+            if ($statusCode -eq 200) {
+                throw "Authentication server returned invalid JSON."
+            }
+        }
+    }
+
+    if ($statusCode -eq 403) {
+        $detail = if ($body) { [string]$body.detail } else { "" }
+        if ($detail -eq "Discord ID is not authorised") {
+            throw "Discord ID is not authorised in the server database."
+        }
+        if (-not $detail) {
+            $detail = "the server denied the request"
+        }
+        throw "Authentication was denied by the server database: $detail"
+    }
+    if ($statusCode -ne 200) {
+        $detail = if ($body) { [string]$body.detail } else { "" }
+        if (-not $detail) {
+            $detail = "HTTP $statusCode"
+        }
+        throw "Authentication failed ($detail)."
+    }
+
+    if (-not $body.api_key -or $body.discord_id -ne $DiscordId) {
+        throw "The server returned an invalid authentication result."
+    }
+
+    return @{
+        ApiKey = $body.api_key
+        DiscordId = $body.discord_id
     }
 }
 
-Export-ModuleMember -Function Get-StoredDiscordId, Save-StoredDiscordId, Get-StoredApiKey, Save-StoredApiKey, Remove-StoredApiKey, Invoke-SimpleAuthentication
+Export-ModuleMember -Function Get-StoredApiKey, Save-StoredApiKey, Remove-StoredApiKey, Invoke-SimpleAuthentication

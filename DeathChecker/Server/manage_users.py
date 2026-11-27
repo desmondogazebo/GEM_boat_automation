@@ -1,6 +1,9 @@
 import argparse
+import os
 import sqlite3
 from pathlib import Path
+
+from Modules.config import Settings, resolve_database_path
 
 
 def main() -> None:
@@ -12,10 +15,18 @@ def main() -> None:
     add.add_argument("discord_id")
     remove = actions.add_parser("remove", help="Revoke a Discord user ID")
     remove.add_argument("discord_id")
-    parser.add_argument("--database", type=Path, default=Path("./echelon.db"))
+    parser.add_argument("--database", type=Path)
     args = parser.parse_args()
 
-    with sqlite3.connect(args.database) as connection:
+    server_directory = Path(__file__).resolve().parent
+    os.environ["ENV_FILE"] = str(server_directory / ".env")
+    os.environ.pop("DATABASE_PATH", None)
+    settings = Settings.from_env()
+    database_path = resolve_database_path(
+        args.database or settings.database_path, server_directory
+    )
+
+    with sqlite3.connect(database_path) as connection:
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS authorised_users (

@@ -18,7 +18,10 @@ function Send-DeathReport {
         } `
         -TimeoutSec 30 `
         -SkipHttpErrorCheck
-    return [int]$response.StatusCode
+    return [pscustomobject]@{
+        StatusCode = [int]$response.StatusCode
+        Error = [string]$response.Content
+    }
 }
 
 Export-ModuleMember -Function Send-DeathReport

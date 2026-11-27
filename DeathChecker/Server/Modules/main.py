@@ -4,9 +4,10 @@ import logging
 import re
 import secrets
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from threading import RLock
 from urllib.parse import urlencode, urlsplit
 
 import requests
@@ -15,12 +16,106 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from config import Settings
-from database import Database
+from Modules.config import Settings
+from Modules.database import Database
 
 logger = logging.getLogger("echelon")
 
 MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024
+ACTIVE_CLIENT_WINDOW = timedelta(minutes=20)
+MAX_TRACKED_CLIENTS = 100
+
+
+@dataclass(frozen=True)
+class ClientActivity:
+    discord_id: str
+    client_ip: str
+    last_api_called: str
+    last_heartbeat_at: datetime | None
+
+
+@dataclass(frozen=True)
+class RecentClient:
+    discord_id: str
+    client_ip: str
+    status: str
+    last_api_called: str
+    last_heartbeat_at: datetime
+
+
+class ClientActivityTracker:
+    def __init__(self) -> None:
+        self._clients: OrderedDict[str, ClientActivity] = OrderedDict()
+        self._lock = RLock()
+
+    def record(
+        self,
+        *,
+        discord_id: str,
+        client_ip: str,
+        api_call: str,
+        status_code: int,
+        heartbeat: bool = False,
+        now: datetime | None = None,
+    ) -> None:
+        discord_id = discord_id.strip()
+        if not discord_id:
+            return
+        current = now or datetime.now(timezone.utc)
+        with self._lock:
+            previous = self._clients.get(discord_id)
+            heartbeat_at = previous.last_heartbeat_at if previous else None
+            heartbeat_succeeded = heartbeat and 200 <= status_code < 400
+            if previous is None and not heartbeat_succeeded:
+                return
+            if heartbeat_succeeded:
+                heartbeat_at = current
+
+            activity = ClientActivity(
+                discord_id=discord_id,
+                client_ip=client_ip,
+                last_api_called=f"{api_call} [{status_code}]",
+                last_heartbeat_at=heartbeat_at,
+            )
+            self._clients[discord_id] = activity
+            self._clients.move_to_end(discord_id)
+            self._remove_expired(current)
+            while len(self._clients) > MAX_TRACKED_CLIENTS:
+                self._clients.popitem(last=False)
+
+    def recent_clients(self, now: datetime | None = None) -> list[RecentClient]:
+        current = now or datetime.now(timezone.utc)
+        with self._lock:
+            self._remove_expired(current)
+            activities = list(self._clients.values())
+
+        clients = []
+        for activity in activities:
+            heartbeat_at = activity.last_heartbeat_at
+            if heartbeat_at is None:
+                continue
+            clients.append(
+                RecentClient(
+                    discord_id=activity.discord_id,
+                    client_ip=activity.client_ip,
+                    status="Active",
+                    last_api_called=activity.last_api_called,
+                    last_heartbeat_at=heartbeat_at,
+                )
+            )
+        return sorted(
+            clients, key=lambda client: client.last_heartbeat_at, reverse=True
+        )
+
+    def _remove_expired(self, now: datetime) -> None:
+        expired = [
+            discord_id
+            for discord_id, activity in self._clients.items()
+            if activity.last_heartbeat_at is None
+            or now - activity.last_heartbeat_at >= ACTIVE_CLIENT_WINDOW
+        ]
+        for discord_id in expired:
+            del self._clients[discord_id]
 
 
 def _format_discord_timestamp(value: str, *, now: datetime | None = None) -> str:
@@ -106,13 +201,18 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    client_activity: ClientActivityTracker | None = None,
+) -> FastAPI:
     settings = settings or Settings.from_env()
     database = Database(settings.database_path)
+    client_activity = client_activity or ClientActivityTracker()
     app = FastAPI(title="Echelon Death Monitor", docs_url=None, redoc_url=None)
     app.add_middleware(RateLimitMiddleware)
     app.state.settings = settings
     app.state.database = database
+    app.state.client_activity = client_activity
 
     def get_authenticated_user(request: Request) -> str:
         authorization = request.headers.get("Authorization", "")
@@ -122,10 +222,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         discord_id = database.validate_api_key(api_key.strip())
         if discord_id is None:
             raise HTTPException(status_code=401, detail="Invalid or expired API key")
+        request.state.discord_id = discord_id
         return discord_id
 
     @app.post("/auth/simple")
-    async def simple_auth(auth: SimpleAuth):
+    async def simple_auth(auth: SimpleAuth, request: Request):
         discord_id = auth.discord_id.strip()
         if not discord_id:
             raise HTTPException(status_code=400, detail="Discord ID cannot be blank")
@@ -137,7 +238,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if api_key is None:
             raise HTTPException(status_code=403, detail="Could not issue API key")
 
+        request.state.discord_id = discord_id
         return {"api_key": api_key, "discord_id": discord_id}
+
+    @app.middleware("http")
+    async def log_request(request: Request, call_next):
+        started = time.perf_counter()
+        client_ip = _client_ip(request)
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return response
+        except Exception:
+            logger.exception(
+                "Request failed: client_ip=%s method=%s path=%s",
+                client_ip,
+                request.method,
+                request.url.path,
+            )
+            raise
+        finally:
+            duration_ms = (time.perf_counter() - started) * 1000
+            discord_id = getattr(request.state, "discord_id", None)
+            if discord_id:
+                client_activity.record(
+                    discord_id=discord_id,
+                    client_ip=client_ip,
+                    api_call=f"{request.method} {request.url.path}",
+                    status_code=status_code,
+                    heartbeat=request.url.path == "/deathcheck",
+                )
+            logger.info(
+                "client_ip=%s method=%s path=%s status=%d duration_ms=%.1f",
+                client_ip,
+                request.method,
+                request.url.path,
+                status_code,
+                duration_ms,
+            )
 
     @app.post("/deathcheck")
     async def deathcheck(
@@ -152,14 +291,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/deathreport")
     async def deathreport(
-        victim: str = Form(..., max_length=128),
-        killer: str = Form(..., max_length=128),
-        death_time: str = Form(..., max_length=64),
+        victim: str = Form("", max_length=128),
+        killer: str = Form("", max_length=128),
+        death_time: str = Form("", max_length=64),
         screenshot: UploadFile = File(...),
         discord_id: str = Depends(get_authenticated_user),
     ):
-        if not victim.strip() or not killer.strip() or not death_time.strip():
-            raise HTTPException(status_code=422, detail="Report fields cannot be blank")
         try:
             image = await screenshot.read(MAX_SCREENSHOT_BYTES + 1)
         finally:
@@ -203,9 +340,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "submitted"}
 
     return app
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(create_app, host="127.0.0.1", port=8000, factory=True)

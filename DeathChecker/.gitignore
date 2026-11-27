@@ -2,10 +2,9 @@ Client/config.json
 Client/*.log
 Server/.env
 Server/.venv/
+Server/EchelonDeathMonitorServer.exe
 Client/dist/
 Server/echelon.db
 Server/__pycache__/
 Server/**/__pycache__/
 Server/**/*.py[cod]
-Server/.pytest_cache/
-Server/.coverage
