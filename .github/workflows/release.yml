@@ -26,23 +26,42 @@ jobs:
           }
           $version = $Matches.version
 
-          $notes = 'Download DailyShipHelper.exe from the release assets. The launcher requests administrator permission and creates an isolated .venv beside the executable on first use; Python 3.11 or later is required.'
+          $requirements = @(
+            '## Before first use'
+            ''
+            '**DeathCheckerClient.exe**'
+            '- Contact me with your 17- to 20-digit Discord user ID and wait for authorization before first use.'
+            '- Requires Windows 10 or later, PowerShell 7 or later on PATH, Granado Espada M, English Windows OCR, internet access, and administrator permission.'
+            '- Python is not required for DeathCheckerClient.'
+            ''
+            '**DailyShipHelper.exe**'
+            '- Requires Windows 10 or later, Granado Espada M, Windows OCR, and Python 3.11 or later available through `py.exe` or `python.exe` on PATH for first-run `.venv` creation.'
+            '- Requests administrator permission to send input to the game; it has no third-party Python packages.'
+            ''
+            'Both executables are attached below. See the repository README files for setup and usage details.'
+          ) -join "`n"
           $previousTag = git describe --tags --abbrev=0 "$tag^" 2>$null
           $range = if ($LASTEXITCODE -eq 0 -and $previousTag) { "$previousTag..$tag" } else { $tag }
           $commits = git log $range --no-merges --format='- %s (%h)'
           $changelog = if ($commits) { "## Changes`n`n" + ($commits -join "`n") + "`n`n" } else { "" }
-          $notes = $changelog + $notes
+          $notes = $requirements + "`n`n" + $changelog
           Set-Content -Path "$env:RUNNER_TEMP\release-notes.md" -Value $notes -Encoding utf8
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Build Daily Ship Helper
+      - name: Build both executables
         shell: pwsh
         run: |
+          .\DeathChecker\Client\BuildClientExe.ps1
+          if (-not (Test-Path .\DeathChecker\Client\dist\DeathCheckerClient.exe)) {
+            throw "DeathCheckerClient.exe was not created."
+          }
           .\DailyShipHelper\BuildDailyShipHelper.ps1
           New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item .\DeathChecker\Client\dist\DeathCheckerClient.exe .\dist\DeathCheckerClient.exe
           Copy-Item .\DailyShipHelper\DailyShipHelper.exe .\dist\DailyShipHelper.exe
-          if (-not (Test-Path .\dist\DailyShipHelper.exe)) {
-            throw "DailyShipHelper.exe was not created."
+          if (-not (Test-Path .\dist\DeathCheckerClient.exe) -or
+              -not (Test-Path .\dist\DailyShipHelper.exe)) {
+            throw "One or both release executables were not created."
           }
 
       - name: Publish release
@@ -52,7 +71,7 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $notes = "$env:RUNNER_TEMP\release-notes.md"
-          $assets = @("dist/DailyShipHelper.exe")
+          $assets = @("dist/DeathCheckerClient.exe", "dist/DailyShipHelper.exe")
           $prerelease = if ($env:VERSION.Contains("-")) { @("--prerelease") } else { @() }
 
           gh release view $tag *> $null

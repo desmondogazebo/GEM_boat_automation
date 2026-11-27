@@ -6,7 +6,9 @@ Daily Ship Helper automates the ship trade-route workflow in Granado Espada M. I
 
 - Windows 10 or later
 - Granado Espada M running with its UI on the primary monitor
-- Python 3.11 or later for first-run creation of the adjacent `.venv`
+- Python 3.11 or later is required for first-run creation of the adjacent
+  `.venv`, available through `py.exe` or `python.exe` on `PATH` (this
+  requirement applies to DailyShipHelper only)
 - The Windows OCR language recognizer for the game's displayed language
 
 The helper has no third-party Python packages. Its C# launcher creates `.venv` beside the executable on first use and runs the bundled Python script from that environment. OCR uses the built-in Windows PowerShell 5.1 and Windows OCR APIs.
@@ -29,10 +31,13 @@ Commands:
 - `DailyShipHelper.exe sendShips 1` sends ships 1 and 3 on the first available route.
 - `DailyShipHelper.exe sendShips 2` sends ship 1 to Lupala, ship 2 to Unguja, and ship 3 to Lupala.
 
-Debug OCR is enabled by default and writes an annotated screenshot to `%TEMP%\GameOCR_debug.png` after each OCR read. Add `--no-debug` to disable it:
+Debug OCR is off by default. Add `--debug` to save an annotated screenshot to
+`%TEMP%\GameOCR_debug.png` after each OCR read. Red boxes outline recognized
+words and matched text; the crosshair marks the selected match and its click
+position.
 
 ```powershell
-.\DailyShipHelper.exe sendShips 1 --no-debug
+.\DailyShipHelper.exe sendShips 1 --debug
 ```
 
 The helper waits up to five minutes for the game to be idle before assigning each ship. It waits for the game window to become active before sending input and does not count inactive time toward its short delays. Avoid using the mouse or keyboard while a batch is running.

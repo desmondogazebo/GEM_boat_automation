@@ -677,10 +677,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("function", nargs="?", help="Automation function: sendShips")
     parser.add_argument("batch_number", nargs="?", help="Batch number: 1 or 2")
-    debug_group = parser.add_mutually_exclusive_group()
-    debug_group.add_argument("--debug", dest="debug", action="store_true")
-    debug_group.add_argument("--no-debug", dest="debug", action="store_false")
-    parser.set_defaults(debug=True)
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="save annotated OCR screenshots with red boxes and click markers",
+    )
     return parser
 
 
