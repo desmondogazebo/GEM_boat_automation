@@ -1,0 +1,4 @@
+.venv/
+DailyShipHelper.exe
+__pycache__/
+*.py[cod]

@@ -16,7 +16,7 @@ from rich.logging import RichHandler
 from rich.table import Table
 from rich.text import Text
 
-from Modules.config import Settings, resolve_database_path
+from Modules.config import Settings
 from Modules.main import ClientActivityTracker, RecentClient, create_app
 
 
@@ -59,9 +59,17 @@ class ClientDashboard:
         )
 
     @staticmethod
-    def _status_text(client: RecentClient) -> Text:
+    def _status_text(client: RecentClient, now: float | None = None) -> Text:
         style = "green" if client.status == "Active" else "yellow"
-        return Text(client.status, style=style)
+        current_time = time.time() if now is None else now
+        elapsed_seconds = max(
+            0, int(current_time - client.last_heartbeat_at.timestamp())
+        )
+        minutes, seconds = divmod(elapsed_seconds, 60)
+        elapsed = (
+            f"{minutes}m {seconds:02d}s ago" if minutes else f"{seconds}s ago"
+        )
+        return Text(f"{client.status} ({elapsed})", style=style)
 
 
 class CloudflareTunnel:
@@ -179,30 +187,6 @@ def _base_directory() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _load_settings(base_directory: Path) -> Settings:
-    base_directory = base_directory.resolve()
-    env_file = base_directory / ".env"
-    example_file = base_directory / ".env.example"
-    if not env_file.is_file():
-        if example_file.is_file():
-            raise FileNotFoundError(
-                f"Server configuration not found: {env_file}. "
-                f"Copy {example_file} to {env_file} and configure it."
-            )
-        raise FileNotFoundError(f"Server configuration not found: {env_file}.")
-
-    os.environ["ENV_FILE"] = str(env_file)
-    os.environ.pop("DATABASE_PATH", None)
-    loaded_settings = Settings.from_env()
-
-    return Settings(
-        database_path=resolve_database_path(
-            loaded_settings.database_path, base_directory
-        ),
-        discord_webhook_url=loaded_settings.discord_webhook_url,
-    )
-
-
 def _configure_logging(console: Console) -> None:
     handler = RichHandler(
         console=console,
@@ -231,7 +215,7 @@ def _run_server() -> int:
     console = Console(highlight=False)
     base_directory = _base_directory()
     os.chdir(base_directory)
-    settings = _load_settings(base_directory)
+    settings = Settings.for_directory(base_directory)
 
     if _is_server_running():
         console.print(

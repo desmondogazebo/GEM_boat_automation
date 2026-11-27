@@ -12,7 +12,7 @@ internal static class ServerExeLauncher
 {
     private const string BundleResourceName = "EchelonDeathMonitorServer.Bundle.zip";
     private const string RuntimeImportCheck =
-        "import fastapi, dotenv, multipart, requests, rich, uvicorn";
+        "import fastapi, multipart, requests, rich, uvicorn";
     private static readonly Version MinimumPythonVersion = new Version(3, 11);
 
     private static int Main()

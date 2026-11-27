@@ -7,6 +7,7 @@ import time
 from collections import OrderedDict, defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from threading import RLock
 from urllib.parse import urlencode, urlsplit
 
@@ -16,7 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from Modules.config import Settings
+from Modules.config import REPORT_RELAY_URL, Settings
 from Modules.database import Database
 
 logger = logging.getLogger("echelon")
@@ -24,6 +25,36 @@ logger = logging.getLogger("echelon")
 MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024
 ACTIVE_CLIENT_WINDOW = timedelta(minutes=20)
 MAX_TRACKED_CLIENTS = 100
+RELAY_RECOVERY_DIRECTORY = "CloudflareWorker"
+
+
+def _write_relay_recovery_instructions(server_directory: Path) -> Path:
+    recovery_directory = server_directory / RELAY_RECOVERY_DIRECTORY
+    readme_path = recovery_directory / "README.md"
+    recovery_directory.mkdir(parents=True, exist_ok=True)
+    if not readme_path.exists():
+        readme_path.write_text(
+            f"""# Cloudflare report relay recovery
+
+The configured report relay endpoint (`{REPORT_RELAY_URL}`) could not be reached.
+These steps apply only to the server owner:
+
+1. In Cloudflare, open **Workers & Pages** and check the `gem-death-report-relay`
+   Worker. Confirm it is deployed and its route matches
+   `deathcheck.desmond-zheng.com/__discord-relay*`.
+2. Check the Worker logs and confirm its `API_ORIGIN` variable is
+   `https://deathcheck.desmond-zheng.com`.
+3. In the Worker settings, confirm the `DISCORD_WEBHOOK_URL` secret is present.
+   Never paste the webhook URL into this folder, a `.env` file, or source control.
+4. If the Worker needs to be redeployed, use its deployed source or version
+   history in the Cloudflare dashboard. This folder intentionally contains
+   recovery instructions only, not a local copy of the deployed Worker.
+
+After correcting the Worker or its route, retry a report from the client.
+""",
+            encoding="utf-8",
+        )
+    return readme_path
 
 
 @dataclass(frozen=True)
@@ -147,6 +178,7 @@ class SimpleAuth(BaseModel):
 class RateLimitMiddleware(BaseHTTPMiddleware):
     LIMITS = {
         "/auth/simple": (10, 60),
+        "/auth/validate": (30, 60),
         "/deathcheck": (30, 60),
         "/deathreport": (10, 60),
     }
@@ -205,7 +237,7 @@ def create_app(
     settings: Settings | None = None,
     client_activity: ClientActivityTracker | None = None,
 ) -> FastAPI:
-    settings = settings or Settings.from_env()
+    settings = settings or Settings.for_directory(Path(__file__).resolve().parents[1])
     database = Database(settings.database_path)
     client_activity = client_activity or ClientActivityTracker()
     app = FastAPI(title="Echelon Death Monitor", docs_url=None, redoc_url=None)
@@ -241,6 +273,12 @@ def create_app(
         request.state.discord_id = discord_id
         return {"api_key": api_key, "discord_id": discord_id}
 
+    @app.post("/auth/validate")
+    async def validate_api_key(
+        _discord_id: str = Depends(get_authenticated_user),
+    ):
+        return {"status": "ok"}
+
     @app.middleware("http")
     async def log_request(request: Request, call_next):
         started = time.perf_counter()
@@ -261,7 +299,7 @@ def create_app(
         finally:
             duration_ms = (time.perf_counter() - started) * 1000
             discord_id = getattr(request.state, "discord_id", None)
-            if discord_id:
+            if discord_id and request.url.path != "/auth/validate":
                 client_activity.record(
                     discord_id=discord_id,
                     client_ip=client_ip,
@@ -291,6 +329,7 @@ def create_app(
 
     @app.post("/deathreport")
     async def deathreport(
+        request: Request,
         victim: str = Form("", max_length=128),
         killer: str = Form("", max_length=128),
         death_time: str = Form("", max_length=64),
@@ -313,26 +352,46 @@ def create_app(
             discord_id,
         )
 
-        if not settings.discord_webhook_url:
-            raise HTTPException(
-                status_code=503, detail="Discord webhook is not configured"
-            )
         try:
+            authorization = request.headers["Authorization"]
             discord_time = _format_discord_timestamp(death_time)
-            webhook_data = {
-                "content": f"**Death Report**\nVictim: {victim.strip()}\nKiller: {killer.strip()}\nTime: {discord_time}",
+            report_data = {
+                "content": (
+                    f"**Death Report**\nVictim: {victim.strip()}\n"
+                    f"Killer: {killer.strip()}\nTime: {discord_time}"
+                ),
             }
             files = {"file": ("death_screenshot.png", image, "image/png")}
             response = requests.post(
-                settings.discord_webhook_url,
-                data=webhook_data,
+                REPORT_RELAY_URL,
+                headers={"Authorization": authorization},
+                data=report_data,
                 files=files,
-                timeout=10,
+                timeout=15,
             )
             response.raise_for_status()
-            logger.info("Webhook posted successfully: %s", response.status_code)
+            logger.info("Death report delivered through Cloudflare relay.")
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            logger.error("Cloudflare report relay is unreachable (%s)", type(exc).__name__)
+            try:
+                recovery_readme = _write_relay_recovery_instructions(
+                    settings.database_path.parent
+                )
+            except OSError:
+                logger.exception("Could not write Cloudflare relay recovery instructions.")
+                detail = (
+                    "Death report relay is unreachable; recovery instructions "
+                    "could not be written"
+                )
+            else:
+                logger.error("Relay recovery instructions: %s", recovery_readme)
+                detail = (
+                    "Death report relay is unreachable; see server-side "
+                    "CloudflareWorker/README.md"
+                )
+            raise HTTPException(status_code=502, detail=detail) from exc
         except requests.RequestException as exc:
-            logger.error("Webhook post failed (%s)", type(exc).__name__)
+            logger.error("Cloudflare report relay failed (%s)", type(exc).__name__)
             raise HTTPException(
                 status_code=502, detail="Discord webhook delivery failed"
             ) from exc
